@@ -180,12 +180,12 @@ Truth table
 
 ## Authors
 
-|--------------------------------------------------|
+
 |            Name	       |  Roll No.	|    Role    |
 |------------------------|------------|------------|
 |  Thulasi Ram Chilukoti |   251116	  | Developer  |
 |  Durga Sai Nayak	     |  251134	  |  Developer |
-|--------------------------------------------------|
+
 
 Course: Object-Oriented Programming with C++ (Mini Project)
 Branch: Computer Science and Engineering (CSE), 2nd Year
