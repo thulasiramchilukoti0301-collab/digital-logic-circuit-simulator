@@ -48,6 +48,13 @@ target_include_directories(nlohmann_json SYSTEM INTERFACE
 )
 target_compile_features(nlohmann_json INTERFACE cxx_std_17)
 
+add_executable(digital_logic_server backend/app/main.cpp)
+target_link_libraries(digital_logic_server
+    PRIVATE
+        digital_logic_engine
+        cpp_httplib
+)
+
 if(BUILD_TESTING)
     add_executable(dependency_probe backend/tests/dependency_probe.cpp)
     target_link_libraries(dependency_probe PRIVATE cpp_httplib nlohmann_json)
