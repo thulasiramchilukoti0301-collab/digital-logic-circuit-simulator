@@ -14,6 +14,9 @@ add_library(digital_logic_engine
     backend/src/ANDGate.cpp
     backend/src/ORGate.cpp
     backend/src/NOTGate.cpp
+    backend/src/XORGate.cpp
+    backend/src/NANDGate.cpp
+    backend/src/NORGate.cpp
 )
 
 target_include_directories(digital_logic_engine

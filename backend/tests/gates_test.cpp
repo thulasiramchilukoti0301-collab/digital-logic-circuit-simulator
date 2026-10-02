@@ -1,6 +1,9 @@
 #include "ANDGate.h"
+#include "NANDGate.h"
 #include "NOTGate.h"
+#include "NORGate.h"
 #include "ORGate.h"
+#include "XORGate.h"
 
 #include <exception>
 #include <iostream>
@@ -89,6 +92,63 @@ int main() {
     expect_invalid_argument("OR constructed with fewer than two inputs", [] {
         digital_logic::ORGate invalid_gate(5, 1);
     });
+
+    const digital_logic::XORGate xor_gate(6);
+    expect_signal("0 XOR 0", xor_gate, {Signal::Low, Signal::Low}, Signal::Low);
+    expect_signal("0 XOR 1", xor_gate, {Signal::Low, Signal::High}, Signal::High);
+    expect_signal("1 XOR 0", xor_gate, {Signal::High, Signal::Low}, Signal::High);
+    expect_signal("1 XOR 1", xor_gate, {Signal::High, Signal::High}, Signal::Low);
+
+    const digital_logic::NANDGate nand_gate(7);
+    expect_signal("0 NAND 0", nand_gate, {Signal::Low, Signal::Low}, Signal::High);
+    expect_signal("0 NAND 1", nand_gate, {Signal::Low, Signal::High}, Signal::High);
+    expect_signal("1 NAND 0", nand_gate, {Signal::High, Signal::Low}, Signal::High);
+    expect_signal("1 NAND 1", nand_gate, {Signal::High, Signal::High}, Signal::Low);
+
+    const digital_logic::NORGate nor_gate(8);
+    expect_signal("0 NOR 0", nor_gate, {Signal::Low, Signal::Low}, Signal::High);
+    expect_signal("0 NOR 1", nor_gate, {Signal::Low, Signal::High}, Signal::Low);
+    expect_signal("1 NOR 0", nor_gate, {Signal::High, Signal::Low}, Signal::Low);
+    expect_signal("1 NOR 1", nor_gate, {Signal::High, Signal::High}, Signal::Low);
+
+    expect_invalid_argument("XOR missing input", [&] {
+        xor_gate.compute({Signal::Low});
+    });
+    expect_invalid_argument("XOR extra input", [&] {
+        xor_gate.compute({Signal::Low, Signal::High, Signal::Low});
+    });
+    expect_invalid_argument("NAND wrong input count", [&] {
+        nand_gate.compute({Signal::High});
+    });
+    expect_invalid_argument("NOR wrong input count", [&] {
+        nor_gate.compute({Signal::Low, Signal::High, Signal::Low});
+    });
+    expect_invalid_argument("XOR undefined input", [&] {
+        xor_gate.compute({Signal::Low, Signal::Undefined});
+    });
+    expect_invalid_argument("NAND undefined input", [&] {
+        nand_gate.compute({Signal::Low, Signal::Undefined});
+    });
+    expect_invalid_argument("NOR undefined input", [&] {
+        nor_gate.compute({Signal::High, Signal::Undefined});
+    });
+    expect_invalid_argument("NAND constructed with fewer than two inputs", [] {
+        digital_logic::NANDGate invalid_gate(9, 1);
+    });
+    expect_invalid_argument("NOR constructed with fewer than two inputs", [] {
+        digital_logic::NORGate invalid_gate(10, 1);
+    });
+
+    const digital_logic::NANDGate three_input_nand(11, 3);
+    expect_signal("1 NAND 1 NAND 1", three_input_nand,
+                  {Signal::High, Signal::High, Signal::High}, Signal::Low);
+    expect_signal("0 NAND 1 NAND 1", three_input_nand,
+                  {Signal::Low, Signal::High, Signal::High}, Signal::High);
+    const digital_logic::NORGate three_input_nor(12, 3);
+    expect_signal("0 NOR 0 NOR 0", three_input_nor,
+                  {Signal::Low, Signal::Low, Signal::Low}, Signal::High);
+    expect_signal("1 NOR 0 NOR 0", three_input_nor,
+                  {Signal::High, Signal::Low, Signal::Low}, Signal::Low);
 
     if (failures != 0) {
         std::cerr << failures << " gate test(s) failed\n";
