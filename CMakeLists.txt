@@ -30,7 +30,29 @@ set_target_properties(digital_logic_engine PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
+# Vendored, header-only dependencies used by the future application layer.
+# Keep them separate from digital_logic_engine so the simulation library
+# remains independent of HTTP and JSON concerns.
+add_library(cpp_httplib INTERFACE)
+target_include_directories(cpp_httplib SYSTEM INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cpp-httplib
+)
+target_compile_features(cpp_httplib INTERFACE cxx_std_17)
+if(WIN32)
+    target_link_libraries(cpp_httplib INTERFACE ws2_32)
+endif()
+
+add_library(nlohmann_json INTERFACE)
+target_include_directories(nlohmann_json SYSTEM INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann_json/include
+)
+target_compile_features(nlohmann_json INTERFACE cxx_std_17)
+
 if(BUILD_TESTING)
+    add_executable(dependency_probe backend/tests/dependency_probe.cpp)
+    target_link_libraries(dependency_probe PRIVATE cpp_httplib nlohmann_json)
+    add_test(NAME dependency_probe COMMAND dependency_probe)
+
     add_executable(digital_logic_smoke backend/tests/smoke.cpp)
     target_link_libraries(digital_logic_smoke PRIVATE digital_logic_engine)
     add_test(NAME digital_logic_smoke COMMAND digital_logic_smoke)
