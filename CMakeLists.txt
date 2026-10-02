@@ -38,4 +38,8 @@ if(BUILD_TESTING)
     add_executable(digital_logic_gates_test backend/tests/gates_test.cpp)
     target_link_libraries(digital_logic_gates_test PRIVATE digital_logic_engine)
     add_test(NAME digital_logic_gates_test COMMAND digital_logic_gates_test)
+
+    add_executable(digital_logic_components_test backend/tests/components_test.cpp)
+    target_link_libraries(digital_logic_components_test PRIVATE digital_logic_engine)
+    add_test(NAME digital_logic_components_test COMMAND digital_logic_components_test)
 endif()

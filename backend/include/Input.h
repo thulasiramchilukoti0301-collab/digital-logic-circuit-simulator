@@ -13,7 +13,7 @@ public:
 
     const std::string& name() const noexcept;
     Signal value() const noexcept;
-    void set_value(Signal value) noexcept;
+    void set_value(Signal value);
 
 private:
     std::string name_;

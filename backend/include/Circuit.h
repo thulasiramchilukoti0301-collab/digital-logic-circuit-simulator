@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Component.h"
+#include "Signal.h"
 #include "Wire.h"
 
 #include <memory>
@@ -8,13 +9,17 @@
 
 namespace digital_logic {
 
+class Output;
+
 class Circuit final {
 public:
     void add_component(std::unique_ptr<Component> component);
     void add_wire(const Wire& wire);
+    bool update_output(ComponentId id, Signal value) noexcept;
 
     const std::vector<std::unique_ptr<Component>>& components() const noexcept;
     const std::vector<Wire>& wires() const noexcept;
+    const Component* find_component(ComponentId id) const noexcept;
 
 private:
     std::vector<std::unique_ptr<Component>> components_;

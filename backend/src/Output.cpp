@@ -4,8 +4,8 @@
 
 namespace digital_logic {
 
-Output::Output(ComponentId id, std::string name, Signal value)
-    : Component(id), name_(std::move(name)), value_(value) {}
+Output::Output(ComponentId id, std::string name)
+    : Component(id), name_(std::move(name)) {}
 
 const std::string& Output::name() const noexcept {
     return name_;
