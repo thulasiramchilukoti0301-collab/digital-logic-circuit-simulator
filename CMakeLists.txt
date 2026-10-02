@@ -42,4 +42,12 @@ if(BUILD_TESTING)
     add_executable(digital_logic_components_test backend/tests/components_test.cpp)
     target_link_libraries(digital_logic_components_test PRIVATE digital_logic_engine)
     add_test(NAME digital_logic_components_test COMMAND digital_logic_components_test)
+
+    add_executable(digital_logic_circuit_validation_test
+        backend/tests/circuit_validation_test.cpp
+    )
+    target_link_libraries(digital_logic_circuit_validation_test PRIVATE digital_logic_engine)
+    add_test(NAME digital_logic_circuit_validation_test
+        COMMAND digital_logic_circuit_validation_test
+    )
 endif()
