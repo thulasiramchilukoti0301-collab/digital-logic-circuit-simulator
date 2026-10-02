@@ -52,6 +52,13 @@ int main() {
     expect_invalid_argument("Input setter rejects Undefined", [&] {
         input.set_value(Signal::Undefined);
     });
+    const Signal invalid_signal = static_cast<Signal>(99);
+    expect_invalid_argument("Input constructor rejects an invalid enum value", [&] {
+        digital_logic::Input invalid(103, "Invalid enum", invalid_signal);
+    });
+    expect_invalid_argument("Input setter rejects an invalid enum value", [&] {
+        input.set_value(invalid_signal);
+    });
     expect(input.value() == Signal::Low,
            "Rejected Input update leaves the previous value intact");
 

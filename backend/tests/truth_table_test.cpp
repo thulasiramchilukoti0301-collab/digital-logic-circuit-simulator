@@ -85,6 +85,18 @@ private:
     bool undefined_;
 };
 
+class ConstantGate final : public digital_logic::Gate {
+public:
+    explicit ConstantGate(digital_logic::ComponentId id) : Gate(id, 0) {}
+
+    Signal compute(const std::vector<Signal>& inputs) const override {
+        if (!inputs.empty()) {
+            throw std::invalid_argument("constant gate does not accept inputs");
+        }
+        return Signal::High;
+    }
+};
+
 void test_not_and_and_tables() {
     {
         digital_logic::Circuit circuit;
@@ -247,18 +259,50 @@ void test_errors_and_limits_restore_state() {
                    mutable_output(circuit, 3)->value() == Signal::Low,
                "row limit rejection happens before modifying state");
     }
+
+    {
+        digital_logic::Circuit circuit;
+        add<digital_logic::Input>(circuit, 1, "A", Signal::High);
+        add<digital_logic::NOTGate>(circuit, 2);
+        add<digital_logic::Output>(circuit, 3, "Y");
+        connect(circuit, 1, 2, 0);
+        connect(circuit, 2, 3, 0);
+        circuit.evaluate();
+        const auto result = circuit.generate_truth_table(0);
+        expect(!result.success && has_error(result, "maximum"),
+               "max_rows zero rejects even a one-row truth table");
+        expect(mutable_input(circuit, 1)->value() == Signal::High &&
+                   mutable_output(circuit, 3)->value() == Signal::Low,
+               "zero row limit preserves circuit state");
+    }
 }
 
 void test_zero_input_circuit() {
-    digital_logic::Circuit circuit;
-    const auto result = circuit.generate_truth_table();
-    expect(result.success, "empty zero-input circuit generates successfully");
-    expect(result.table.rows.size() == 1,
-           "zero-input circuit has exactly one assignment");
-    if (result.success && result.table.rows.size() == 1) {
-        expect(result.table.rows[0].inputs.empty() &&
-                   result.table.rows[0].outputs.empty(),
-               "zero-input and zero-output row is empty");
+    {
+        digital_logic::Circuit circuit;
+        const auto result = circuit.generate_truth_table();
+        expect(result.success, "empty zero-input circuit generates successfully");
+        expect(result.table.rows.size() == 1,
+               "zero-input circuit has exactly one assignment");
+        if (result.success && result.table.rows.size() == 1) {
+            expect(result.table.rows[0].inputs.empty() &&
+                       result.table.rows[0].outputs.empty(),
+                   "zero-input and zero-output row is empty");
+        }
+    }
+    {
+        digital_logic::Circuit circuit;
+        add<ConstantGate>(circuit, 1);
+        add<digital_logic::Output>(circuit, 2, "Constant");
+        connect(circuit, 1, 2, 0);
+        const auto result = circuit.generate_truth_table();
+        expect(result.success,
+               "valid zero-input circuit with components generates successfully");
+        expect(result.table.rows.size() == 1 &&
+                   result.table.rows[0].inputs.empty() &&
+                   result.table.rows[0].outputs.size() == 1 &&
+                   result.table.rows[0].outputs[0] == Signal::High,
+               "zero-input constant gate produces one output row");
     }
 }
 

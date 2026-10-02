@@ -295,16 +295,19 @@ EvaluationResult Circuit::evaluate() {
                 const std::vector<Signal>& inputs = destination_inputs.at(id);
                 const Signal computed = gate->compute(inputs);
                 if (computed != Signal::Low && computed != Signal::High) {
+                    result.outputs.clear();
                     result.errors.emplace_back("gate " + std::to_string(id) +
                                                " produced an Undefined signal");
                     return result;
                 }
                 signals[id] = computed;
             } catch (const std::exception& error) {
+                result.outputs.clear();
                 result.errors.emplace_back("gate " + std::to_string(id) +
                                            " computation failed: " + error.what());
                 return result;
             } catch (...) {
+                result.outputs.clear();
                 result.errors.emplace_back("gate " + std::to_string(id) +
                                            " computation failed with an unknown error");
                 return result;
@@ -312,6 +315,7 @@ EvaluationResult Circuit::evaluate() {
         } else if (dynamic_cast<const Output*>(component) != nullptr) {
             const Signal value = destination_inputs.at(id).front();
             if (value != Signal::Low && value != Signal::High) {
+                result.outputs.clear();
                 result.errors.emplace_back("output " + std::to_string(id) +
                                            " received an Undefined signal");
                 return result;

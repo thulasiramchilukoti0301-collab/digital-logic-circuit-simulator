@@ -7,7 +7,7 @@ namespace digital_logic {
 
 Input::Input(ComponentId id, std::string name, Signal value)
     : Component(id), name_(std::move(name)), value_(value) {
-    if (value == Signal::Undefined) {
+    if (value != Signal::Low && value != Signal::High) {
         throw std::invalid_argument("input value must be Low or High");
     }
 }
@@ -21,7 +21,7 @@ Signal Input::value() const noexcept {
 }
 
 void Input::set_value(Signal value) {
-    if (value == Signal::Undefined) {
+    if (value != Signal::Low && value != Signal::High) {
         throw std::invalid_argument("input value must be Low or High");
     }
     value_ = value;

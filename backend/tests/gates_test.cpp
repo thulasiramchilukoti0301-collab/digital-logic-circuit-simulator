@@ -140,15 +140,36 @@ int main() {
     });
 
     const digital_logic::NANDGate three_input_nand(11, 3);
-    expect_signal("1 NAND 1 NAND 1", three_input_nand,
-                  {Signal::High, Signal::High, Signal::High}, Signal::Low);
-    expect_signal("0 NAND 1 NAND 1", three_input_nand,
-                  {Signal::Low, Signal::High, Signal::High}, Signal::High);
+    const digital_logic::ANDGate three_input_and(13, 3);
+    const digital_logic::ORGate three_input_or(14, 3);
     const digital_logic::NORGate three_input_nor(12, 3);
-    expect_signal("0 NOR 0 NOR 0", three_input_nor,
-                  {Signal::Low, Signal::Low, Signal::Low}, Signal::High);
-    expect_signal("1 NOR 0 NOR 0", three_input_nor,
-                  {Signal::High, Signal::Low, Signal::Low}, Signal::Low);
+    const Signal combinations[8][3] = {
+        {Signal::Low, Signal::Low, Signal::Low},
+        {Signal::Low, Signal::Low, Signal::High},
+        {Signal::Low, Signal::High, Signal::Low},
+        {Signal::Low, Signal::High, Signal::High},
+        {Signal::High, Signal::Low, Signal::Low},
+        {Signal::High, Signal::Low, Signal::High},
+        {Signal::High, Signal::High, Signal::Low},
+        {Signal::High, Signal::High, Signal::High},
+    };
+    for (const auto& values : combinations) {
+        const bool all_high = values[0] == Signal::High &&
+                              values[1] == Signal::High &&
+                              values[2] == Signal::High;
+        const bool any_high = values[0] == Signal::High ||
+                              values[1] == Signal::High ||
+                              values[2] == Signal::High;
+        const std::vector<Signal> inputs{values[0], values[1], values[2]};
+        expect_signal("three-input AND", three_input_and, inputs,
+                      all_high ? Signal::High : Signal::Low);
+        expect_signal("three-input OR", three_input_or, inputs,
+                      any_high ? Signal::High : Signal::Low);
+        expect_signal("three-input NAND", three_input_nand, inputs,
+                      all_high ? Signal::Low : Signal::High);
+        expect_signal("three-input NOR", three_input_nor, inputs,
+                      any_high ? Signal::Low : Signal::High);
+    }
 
     if (failures != 0) {
         std::cerr << failures << " gate test(s) failed\n";
