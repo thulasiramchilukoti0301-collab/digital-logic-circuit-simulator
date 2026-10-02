@@ -2,6 +2,7 @@
 
 #include "Component.h"
 #include "Signal.h"
+#include "TruthTable.h"
 #include "Wire.h"
 
 #include <memory>
@@ -35,6 +36,7 @@ public:
     const Component* find_component(ComponentId id) const noexcept;
     ValidationResult validate() const;
     EvaluationResult evaluate();
+    TruthTableResult generate_truth_table(std::size_t max_rows = 4096);
 
 private:
     void validate_wire(const Wire& wire) const;

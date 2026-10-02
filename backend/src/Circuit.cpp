@@ -3,7 +3,9 @@
 #include "Input.h"
 #include "Output.h"
 
+#include <algorithm>
 #include <functional>
+#include <limits>
 #include <queue>
 #include <stdexcept>
 #include <string>
@@ -12,6 +14,23 @@
 #include <utility>
 
 namespace digital_logic {
+
+namespace {
+
+template <typename Action>
+class ScopeExit final {
+public:
+    explicit ScopeExit(Action action) : action_(std::move(action)) {}
+    ~ScopeExit() noexcept { action_(); }
+
+    ScopeExit(const ScopeExit&) = delete;
+    ScopeExit& operator=(const ScopeExit&) = delete;
+
+private:
+    Action action_;
+};
+
+} // namespace
 
 void Circuit::add_component(std::unique_ptr<Component> component) {
     if (!component) {
@@ -324,6 +343,106 @@ EvaluationResult Circuit::evaluate() {
     for (const auto& output : result.outputs) {
         set_output_value(output.first, output.second);
     }
+    result.success = true;
+    return result;
+}
+
+TruthTableResult Circuit::generate_truth_table(std::size_t max_rows) {
+    TruthTableResult result;
+    const ValidationResult validation = validate();
+    if (!validation.is_valid()) {
+        result.errors = validation.errors;
+        return result;
+    }
+
+    std::vector<Input*> inputs;
+    std::vector<Output*> outputs;
+    for (const auto& component : components_) {
+        if (auto* input = dynamic_cast<Input*>(component.get())) {
+            inputs.push_back(input);
+        } else if (auto* output = dynamic_cast<Output*>(component.get())) {
+            outputs.push_back(output);
+        }
+    }
+    const auto by_id = [](const Component* left, const Component* right) {
+        return left->id() < right->id();
+    };
+    std::sort(inputs.begin(), inputs.end(), by_id);
+    std::sort(outputs.begin(), outputs.end(), by_id);
+
+    if (inputs.size() >= std::numeric_limits<std::size_t>::digits) {
+        result.errors.emplace_back("truth table input count exceeds the supported row-count range");
+        return result;
+    }
+    const std::size_t row_count = std::size_t{1} << inputs.size();
+    if (row_count > max_rows) {
+        result.errors.emplace_back("truth table requires " + std::to_string(row_count) +
+                                   " rows, exceeding the configured maximum of " +
+                                   std::to_string(max_rows));
+        return result;
+    }
+
+    result.table.input_columns.reserve(inputs.size());
+    std::vector<Signal> original_inputs;
+    original_inputs.reserve(inputs.size());
+    for (const Input* input : inputs) {
+        result.table.input_columns.push_back({input->id(), input->name()});
+        original_inputs.push_back(input->value());
+    }
+
+    result.table.output_columns.reserve(outputs.size());
+    std::vector<Signal> original_outputs;
+    original_outputs.reserve(outputs.size());
+    for (const Output* output : outputs) {
+        result.table.output_columns.push_back({output->id(), output->name()});
+        original_outputs.push_back(output->value());
+    }
+
+    ScopeExit restore_state([&]() noexcept {
+        for (std::size_t index = 0; index < inputs.size(); ++index) {
+            inputs[index]->set_value(original_inputs[index]);
+        }
+        for (std::size_t index = 0; index < outputs.size(); ++index) {
+            outputs[index]->set_value(original_outputs[index]);
+        }
+    });
+
+    result.table.rows.reserve(row_count);
+    for (std::size_t assignment = 0; assignment < row_count; ++assignment) {
+        TruthTableRow row;
+        row.inputs.reserve(inputs.size());
+        for (std::size_t column = 0; column < inputs.size(); ++column) {
+            const std::size_t bit_position = inputs.size() - column - 1;
+            const bool high = ((assignment >> bit_position) & std::size_t{1}) != 0;
+            const Signal value = high ? Signal::High : Signal::Low;
+            inputs[column]->set_value(value);
+            row.inputs.push_back(value);
+        }
+
+        const EvaluationResult evaluation = evaluate();
+        if (!evaluation.success) {
+            result.errors.emplace_back("truth-table evaluation failed at row " +
+                                       std::to_string(assignment));
+            result.errors.insert(result.errors.end(), evaluation.errors.begin(),
+                                 evaluation.errors.end());
+            result.table = TruthTable{};
+            return result;
+        }
+
+        row.outputs.reserve(outputs.size());
+        for (const Output* output : outputs) {
+            const auto value = evaluation.outputs.find(output->id());
+            if (value == evaluation.outputs.end()) {
+                result.errors.emplace_back("evaluation did not return output " +
+                                           std::to_string(output->id()));
+                result.table = TruthTable{};
+                return result;
+            }
+            row.outputs.push_back(value->second);
+        }
+        result.table.rows.push_back(std::move(row));
+    }
+
     result.success = true;
     return result;
 }

@@ -58,4 +58,10 @@ if(BUILD_TESTING)
     add_test(NAME digital_logic_circuit_evaluation_test
         COMMAND digital_logic_circuit_evaluation_test
     )
+
+    add_executable(digital_logic_truth_table_test
+        backend/tests/truth_table_test.cpp
+    )
+    target_link_libraries(digital_logic_truth_table_test PRIVATE digital_logic_engine)
+    add_test(NAME digital_logic_truth_table_test COMMAND digital_logic_truth_table_test)
 endif()
