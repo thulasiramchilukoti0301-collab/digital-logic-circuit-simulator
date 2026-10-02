@@ -90,18 +90,8 @@ int main() {
            "Circuit lookup returns nullptr for an unknown ID");
     const auto* stored_output =
         dynamic_cast<const digital_logic::Output*>(circuit.find_component(302));
-    expect(circuit.update_output(302, Signal::Low),
-           "Circuit can update a stored Output to Low");
-    expect(stored_output != nullptr && stored_output->value() == Signal::Low,
-           "Output reports its updated Low value");
-    expect(circuit.update_output(302, Signal::High),
-           "Circuit can update a stored Output to High");
-    expect(stored_output != nullptr && stored_output->value() == Signal::High,
-           "Output reports its updated High value");
-    expect(!circuit.update_output(301, Signal::Low),
-           "Circuit refuses to update a non-Output component");
-    expect(!circuit.update_output(999, Signal::High),
-           "Circuit refuses to update a missing component ID");
+    expect(stored_output != nullptr && stored_output->value() == Signal::Undefined,
+           "Output remains read-only outside Circuit evaluation");
     if (stored_gate != nullptr) {
         expect(stored_gate->compute({Signal::High, Signal::High}) == Signal::High,
                "Stored Gate remains usable through the Gate interface");

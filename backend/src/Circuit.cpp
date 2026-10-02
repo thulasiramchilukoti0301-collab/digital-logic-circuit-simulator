@@ -4,6 +4,7 @@
 #include "Output.h"
 
 #include <functional>
+#include <queue>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -77,21 +78,16 @@ void Circuit::validate_wire(const Wire& wire) const {
     }
 }
 
-bool Circuit::update_output(ComponentId id, Signal value) noexcept {
-    if (value != Signal::Low && value != Signal::High && value != Signal::Undefined) {
-        return false;
-    }
+void Circuit::set_output_value(ComponentId id, Signal value) noexcept {
     for (const auto& component : components_) {
         if (component->id() == id) {
             auto* output = dynamic_cast<Output*>(component.get());
-            if (output == nullptr) {
-                return false;
+            if (output != nullptr) {
+                output->set_value(value);
             }
-            output->set_value(value);
-            return true;
+            return;
         }
     }
-    return false;
 }
 
 const std::vector<std::unique_ptr<Component>>& Circuit::components() const noexcept {
@@ -225,6 +221,110 @@ ValidationResult Circuit::validate() const {
         }
     }
 
+    return result;
+}
+
+EvaluationResult Circuit::evaluate() {
+    EvaluationResult result;
+    const ValidationResult validation = validate();
+    if (!validation.is_valid()) {
+        result.errors = validation.errors;
+        return result;
+    }
+
+    std::unordered_map<ComponentId, Signal> signals;
+    std::unordered_map<ComponentId, std::vector<Signal>> destination_inputs;
+    std::unordered_map<ComponentId, std::size_t> indegree;
+    std::unordered_map<ComponentId, std::vector<const Wire*>> outgoing_wires;
+    signals.reserve(components_.size());
+    destination_inputs.reserve(components_.size());
+    indegree.reserve(components_.size());
+
+    for (const auto& component : components_) {
+        indegree.emplace(component->id(), 0);
+        if (const auto* input = dynamic_cast<const Input*>(component.get())) {
+            signals.emplace(input->id(), input->value());
+        } else if (const auto* gate = dynamic_cast<const Gate*>(component.get())) {
+            destination_inputs.emplace(
+                gate->id(), std::vector<Signal>(gate->input_count(), Signal::Undefined));
+        } else if (dynamic_cast<const Output*>(component.get()) != nullptr) {
+            destination_inputs.emplace(component->id(), std::vector<Signal>(1, Signal::Undefined));
+        }
+    }
+
+    for (const Wire& wire : wires_) {
+        ++indegree[wire.destination_id()];
+        outgoing_wires[wire.source_id()].push_back(&wire);
+    }
+
+    std::queue<ComponentId> ready;
+    for (const auto& component : components_) {
+        if (indegree[component->id()] == 0) {
+            ready.push(component->id());
+        }
+    }
+
+    std::size_t processed = 0;
+    while (!ready.empty()) {
+        const ComponentId id = ready.front();
+        ready.pop();
+        ++processed;
+
+        const Component* component = find_component(id);
+        if (const auto* gate = dynamic_cast<const Gate*>(component)) {
+            try {
+                const std::vector<Signal>& inputs = destination_inputs.at(id);
+                const Signal computed = gate->compute(inputs);
+                if (computed != Signal::Low && computed != Signal::High) {
+                    result.errors.emplace_back("gate " + std::to_string(id) +
+                                               " produced an Undefined signal");
+                    return result;
+                }
+                signals[id] = computed;
+            } catch (const std::exception& error) {
+                result.errors.emplace_back("gate " + std::to_string(id) +
+                                           " computation failed: " + error.what());
+                return result;
+            } catch (...) {
+                result.errors.emplace_back("gate " + std::to_string(id) +
+                                           " computation failed with an unknown error");
+                return result;
+            }
+        } else if (dynamic_cast<const Output*>(component) != nullptr) {
+            const Signal value = destination_inputs.at(id).front();
+            if (value != Signal::Low && value != Signal::High) {
+                result.errors.emplace_back("output " + std::to_string(id) +
+                                           " received an Undefined signal");
+                return result;
+            }
+            result.outputs.emplace(id, value);
+        }
+
+        const auto outgoing = outgoing_wires.find(id);
+        if (outgoing != outgoing_wires.end()) {
+            const Signal source_signal = signals.at(id);
+            for (const Wire* wire : outgoing->second) {
+                auto& inputs = destination_inputs.at(wire->destination_id());
+                inputs[wire->destination_pin()] = source_signal;
+                std::size_t& remaining = indegree[wire->destination_id()];
+                --remaining;
+                if (remaining == 0) {
+                    ready.push(wire->destination_id());
+                }
+            }
+        }
+    }
+
+    if (processed != components_.size()) {
+        result.outputs.clear();
+        result.errors.emplace_back("circuit evaluation could not process every component; graph may contain a cycle");
+        return result;
+    }
+
+    for (const auto& output : result.outputs) {
+        set_output_value(output.first, output.second);
+    }
+    result.success = true;
     return result;
 }
 
