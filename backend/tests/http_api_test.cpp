@@ -92,7 +92,8 @@ void expect_failure_shape(const httplib::Result& response, int status,
                    !body["errors"].empty() && body["errors"][0].contains("code") &&
                    body["errors"][0].contains("message"),
                label + " has structured errors");
-        expect(!body.contains("outputs"), label + " has no partial outputs");
+        expect(!body.contains("outputs") && !body.contains("inputs") && !body.contains("rows"),
+               label + " has no partial simulation or truth-table data");
     } catch (const std::exception& error) {
         expect(false, label + " response is valid JSON: " + error.what());
     }
@@ -157,6 +158,93 @@ void test_request_errors(ApiServer& api) {
                          422, "structurally invalid circuit");
 }
 
+void test_successful_truth_table(ApiServer& api) {
+    auto client = api.client();
+    const auto response = client.Post("/api/truth-table", and_request().dump(),
+                                      "application/json");
+    expect(response && response->status == 200, "valid truth-table request returns HTTP 200");
+    if (!response) return;
+    expect(response->get_header_value("Content-Type").find("application/json") == 0,
+           "truth-table response uses JSON content type");
+    try {
+        const Json body = Json::parse(response->body);
+        expect(body.value("success", false), "truth-table success response has success=true");
+        expect(body.contains("inputs") && body["inputs"].is_array() &&
+                   body["inputs"].size() == 2,
+               "truth-table response has two input columns");
+        expect(body.contains("outputs") && body["outputs"].is_array() &&
+                   body["outputs"].size() == 1,
+               "truth-table response has one output column");
+        if (body.contains("inputs") && body["inputs"].is_array() &&
+            body["inputs"].size() == 2 && body.contains("outputs") &&
+            body["outputs"].is_array() && body["outputs"].size() == 1) {
+            expect(body["inputs"][0]["id"] == "1" && body["inputs"][0]["name"] == "A" &&
+                       body["outputs"][0]["id"] == "4" &&
+                       body["outputs"][0]["name"] == "Result",
+                   "truth-table columns preserve component IDs and names");
+        }
+        expect(body.contains("rows") && body["rows"].is_array() && body["rows"].size() == 4,
+               "two-input AND truth table contains four rows");
+        if (body.contains("rows") && body["rows"].is_array() && body["rows"].size() == 4) {
+            const int expected_inputs[4][2] = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
+            const int expected_outputs[4] = {0, 0, 0, 1};
+            for (std::size_t row = 0; row < 4; ++row) {
+                expect(body["rows"][row]["inputs"].size() == 2 &&
+                           body["rows"][row]["outputs"].size() == 1,
+                       "each truth-table row has the expected vector widths");
+                if (body["rows"][row]["inputs"].size() == 2 &&
+                    body["rows"][row]["outputs"].size() == 1) {
+                    expect(body["rows"][row]["inputs"][0] == expected_inputs[row][0] &&
+                               body["rows"][row]["inputs"][1] == expected_inputs[row][1] &&
+                               body["rows"][row]["outputs"][0] == expected_outputs[row],
+                           "AND row values and binary ordering match C++ truth table");
+                }
+            }
+        }
+    } catch (const std::exception& error) {
+        expect(false, std::string("truth-table response parses as JSON: ") + error.what());
+    }
+}
+
+void test_truth_table_errors(ApiServer& api) {
+    auto client = api.client();
+    expect_failure_shape(client.Post("/api/truth-table", "{", "application/json"), 400,
+                         "truth-table malformed JSON");
+    expect_failure_shape(client.Post("/api/truth-table", "{}", "application/json"), 400,
+                         "truth-table malformed request schema");
+    expect_failure_shape(client.Post("/api/truth-table", and_request().dump(), "text/plain"),
+                         400, "truth-table non-JSON content type");
+
+    Json invalid_circuit = {
+        {"version", 1},
+        {"components", Json::array({
+            {{"id", "1"}, {"type", "and"}, {"inputCount", 2}},
+            {{"id", "2"}, {"type", "output"}, {"name", "Y"}}
+        })},
+        {"wires", Json::array()}
+    };
+    expect_failure_shape(client.Post("/api/truth-table", invalid_circuit.dump(),
+                                     "application/json"),
+                         422, "truth-table structurally invalid circuit");
+
+    Json excessive_table = {{"version", 1}, {"components", Json::array()},
+                            {"wires", Json::array({
+                                {{"sourceId", "1"}, {"destinationId", "100"},
+                                 {"destinationPin", 0}}
+                            })}};
+    for (int id = 1; id <= 13; ++id) {
+        excessive_table["components"].push_back({
+            {"id", std::to_string(id)}, {"type", "input"},
+            {"name", "I" + std::to_string(id)}, {"value", 0}
+        });
+    }
+    excessive_table["components"].push_back(
+        {{"id", "100"}, {"type", "output"}, {"name", "Y"}});
+    expect_failure_shape(client.Post("/api/truth-table", excessive_table.dump(),
+                                     "application/json"),
+                         422, "truth-table exceeds engine default row limit");
+}
+
 } // namespace
 
 int main() {
@@ -165,6 +253,8 @@ int main() {
         test_health_unchanged(api);
         test_successful_simulation(api);
         test_request_errors(api);
+        test_successful_truth_table(api);
+        test_truth_table_errors(api);
     } catch (const std::exception& error) {
         std::cerr << "HTTP API test setup failed: " << error.what() << '\n';
         return 1;

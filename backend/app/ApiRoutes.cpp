@@ -94,6 +94,41 @@ void register_api_routes(httplib::Server& server) {
             });
         }
     });
+
+    server.Post("/api/truth-table", [](const httplib::Request& request,
+                                       httplib::Response& response) {
+        try {
+            if (!has_json_content_type(request)) {
+                send_json(response, 400, errors_json({
+                    {"invalid_content_type", "Content-Type must be application/json"}
+                }));
+                return;
+            }
+
+            const CircuitRequestParseResult parsed = parse_circuit_request(request.body);
+            if (!parsed.success) {
+                send_json(response, 400, errors_json(parsed.errors));
+                return;
+            }
+
+            CircuitBuildResult built = build_circuit(parsed.request);
+            if (!built.success || !built.circuit) {
+                send_json(response, 422, errors_json(built.errors));
+                return;
+            }
+
+            const TruthTableResult truth_table = built.circuit->generate_truth_table();
+            const Json body = truth_table_result_to_json(truth_table);
+            send_json(response, truth_table.success && body.value("success", false) ? 200 : 422,
+                      body);
+        } catch (...) {
+            send_json(response, 500, Json{
+                {"success", false},
+                {"errors", Json::array({{{"code", "internal_error"},
+                                         {"message", "An unexpected server error occurred"}}})}
+            });
+        }
+    });
 }
 
 } // namespace digital_logic::app
