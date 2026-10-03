@@ -60,6 +60,18 @@ if(BUILD_TESTING)
     target_link_libraries(dependency_probe PRIVATE cpp_httplib nlohmann_json)
     add_test(NAME dependency_probe COMMAND dependency_probe)
 
+    add_executable(digital_logic_circuit_request_test
+        backend/app/CircuitRequest.cpp
+        backend/tests/circuit_request_test.cpp
+    )
+    target_include_directories(digital_logic_circuit_request_test PRIVATE backend/app)
+    target_link_libraries(digital_logic_circuit_request_test
+        PRIVATE digital_logic_engine nlohmann_json
+    )
+    add_test(NAME digital_logic_circuit_request_test
+        COMMAND digital_logic_circuit_request_test
+    )
+
     add_executable(digital_logic_smoke backend/tests/smoke.cpp)
     target_link_libraries(digital_logic_smoke PRIVATE digital_logic_engine)
     add_test(NAME digital_logic_smoke COMMAND digital_logic_smoke)
