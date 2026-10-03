@@ -129,6 +129,49 @@ void register_api_routes(httplib::Server& server) {
             });
         }
     });
+
+    server.Post("/api/validate", [](const httplib::Request& request,
+                                    httplib::Response& response) {
+        try {
+            if (!has_json_content_type(request)) {
+                send_json(response, 400, errors_json({
+                    {"invalid_content_type", "Content-Type must be application/json"}
+                }));
+                return;
+            }
+
+            const CircuitRequestParseResult parsed = parse_circuit_request(request.body);
+            if (!parsed.success) {
+                send_json(response, 400, errors_json(parsed.errors));
+                return;
+            }
+
+            CircuitBuildResult built = build_circuit(parsed.request);
+            if (!built.success || !built.circuit) {
+                send_json(response, 422, errors_json(built.errors));
+                return;
+            }
+
+            const ValidationResult validation = built.circuit->validate();
+            if (!validation.is_valid()) {
+                std::vector<AdapterError> errors;
+                errors.reserve(validation.errors.size());
+                for (const std::string& message : validation.errors) {
+                    errors.push_back({"invalid_circuit", message});
+                }
+                send_json(response, 422, errors_json(errors));
+                return;
+            }
+
+            send_json(response, 200, Json{{"success", true}});
+        } catch (...) {
+            send_json(response, 500, Json{
+                {"success", false},
+                {"errors", Json::array({{{"code", "internal_error"},
+                                         {"message", "An unexpected server error occurred"}}})}
+            });
+        }
+    });
 }
 
 } // namespace digital_logic::app

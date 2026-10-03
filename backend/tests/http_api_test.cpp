@@ -245,6 +245,50 @@ void test_truth_table_errors(ApiServer& api) {
                          422, "truth-table exceeds engine default row limit");
 }
 
+void test_validation_endpoint(ApiServer& api) {
+    auto client = api.client();
+    auto response = client.Post("/api/validate", and_request().dump(), "application/json");
+    expect(response && response->status == 200, "valid circuit returns HTTP 200 from validate");
+    if (response) {
+        try {
+            const Json body = Json::parse(response->body);
+            expect(body.is_object() && body.size() == 1 && body.value("success", false),
+                   "valid circuit response is exactly success=true without simulation data");
+        } catch (const std::exception& error) {
+            expect(false, std::string("valid circuit response parses as JSON: ") + error.what());
+        }
+    }
+
+    expect_failure_shape(client.Post("/api/validate", "{", "application/json"), 400,
+                         "validate malformed JSON");
+    expect_failure_shape(client.Post("/api/validate", "{}", "application/json"), 400,
+                         "validate malformed schema");
+    expect_failure_shape(client.Post("/api/validate"), 400,
+                         "validate missing content type");
+    expect_failure_shape(client.Post("/api/validate", and_request().dump(), "text/plain"), 400,
+                         "validate non-JSON content type");
+
+    Json invalid_circuit = {
+        {"version", 1},
+        {"components", Json::array({
+            {{"id", "1"}, {"type", "and"}, {"inputCount", 2}},
+            {{"id", "2"}, {"type", "output"}, {"name", "Y"}}
+        })},
+        {"wires", Json::array()}
+    };
+    response = client.Post("/api/validate", invalid_circuit.dump(), "application/json");
+    expect_failure_shape(response, 422, "validate structurally invalid circuit");
+    if (response) {
+        try {
+            const Json body = Json::parse(response->body);
+            expect(body["errors"][0]["code"] == "invalid_circuit",
+                   "invalid circuit uses the structured invalid_circuit code");
+        } catch (const std::exception& error) {
+            expect(false, std::string("validation error response parses as JSON: ") + error.what());
+        }
+    }
+}
+
 } // namespace
 
 int main() {
@@ -255,6 +299,7 @@ int main() {
         test_request_errors(api);
         test_successful_truth_table(api);
         test_truth_table_errors(api);
+        test_validation_endpoint(api);
     } catch (const std::exception& error) {
         std::cerr << "HTTP API test setup failed: " << error.what() << '\n';
         return 1;
