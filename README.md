@@ -1,8 +1,8 @@
 # Digital Logic Circuit Simulator
 
-An interactive, web-based digital logic circuit design and simulation tool. Users build circuits visually on a canvas, wire logic gates together, set binary inputs, and view the outputs, while all gate evaluation is performed by an object-oriented **C++17 simulation engine**.
+The project combines a complete C++17 combinational simulation engine and local HTTP API with a React, TypeScript, Vite frontend shell. The C++ engine is authoritative for circuit validation, simulation, and truth-table results. The visual editor is future work.
 
-**Core:** C++17, CMake, STL | **Frontend:** HTML5, CSS3, JavaScript | **Status:** In development
+**Core:** C++17, CMake, STL | **Frontend:** React, TypeScript, Vite | **Status:** In development
 
 ---
 
@@ -13,11 +13,13 @@ An interactive, web-based digital logic circuit design and simulation tool. User
 - [Supported Components](#supported-components)
 - [System Architecture](#system-architecture)
 - [C++ Simulation Engine](#c-simulation-engine)
-- [Web Visual Editor](#web-visual-editor)
+- [Frontend Shell](#frontend-shell)
 - [OOP Concepts Demonstrated](#oop-concepts-demonstrated)
 - [Example Circuit](#example-circuit)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
+- [Frontend Development](#frontend-development)
+- [Current Development Status](#current-development-status)
 - [Development Roadmap](#development-roadmap)
 - [Scope](#scope)
 - [Authors](#authors)
@@ -26,12 +28,12 @@ An interactive, web-based digital logic circuit design and simulation tool. User
 
 ## Overview
 
-The Digital Logic Circuit Simulator lets a user open the application in a browser, place gates on a canvas, connect them with wires, toggle binary inputs, run the simulation, and observe the resulting outputs, all without touching a terminal.
+The Digital Logic Circuit Simulator includes a browser shell that checks its connection to the local C++ server. The interactive circuit editor has not been implemented yet.
 
 The project has two layers:
 
 1. **C++ digital logic simulation engine:** the academic and technical core. It models gates, wires, inputs, outputs and circuits using object-oriented design, and is the single authoritative source of simulation results.
-2. **Web-based visual circuit editor:** a presentation and interaction layer for building circuits and displaying results. It does not contain gate logic; it sends the circuit to the C++ engine and shows what comes back.
+2. **React, TypeScript, Vite frontend shell:** a presentation layer with a backend connection check and an API client prepared for future editor interactions. It contains no gate logic.
 
 ## Features
 
@@ -45,15 +47,12 @@ The project has two layers:
 - Truth-table generation based on the actual circuit (never hardcoded)
 - Easy to add new gates without modifying core `Circuit` logic
 
-**Visual editor (web)**
+**Frontend shell (React, TypeScript, Vite)**
 
-- Gate library / toolbar: AND, OR, NOT, XOR, NAND, NOR, INPUT, OUTPUT
-- Canvas to add, move, select and delete components
-- Create and remove wire connections visually
-- Toggle input values between `0` and `1`
-- One-click **Simulate** with outputs shown in the UI
-- Truth-table view for the constructed circuit
-- Save/load circuits (if time permits)
+- Responsive application shell with a circuit-editor placeholder
+- Startup health check with connected/unavailable status and retry action
+- Typed API client for health, validation, simulation, and truth-table endpoints
+- Vite development proxy to the local C++ server
 
 ## Supported Components
 
@@ -71,7 +70,7 @@ The project has two layers:
 ## System Architecture
 
 ```text
-        Web Browser (visual circuit editor)
+        Web Browser (React application shell)
                      |
                      |  API / communication layer
                      v
@@ -85,9 +84,7 @@ The project has two layers:
       Gates        Wires     Inputs / Outputs
 ```
 
-The browser handles drawing and interaction only. When the user clicks **Simulate**, the circuit definition and input values are sent through the communication layer to the C++ engine, which evaluates the circuit and returns the output values for the UI to display.
-
-> The exact communication mechanism between the frontend and the C++ engine will be finalized during development.
+The browser communicates with the C++ application through its local HTTP API. The current shell checks the backend health endpoint; its API client also defines calls for validation, simulation, and truth tables. The future editor will own presentation and interaction, while validation, simulation, and truth-table generation remain in the C++ engine.
 
 ## C++ Simulation Engine
 
@@ -95,7 +92,7 @@ The engine is built around an abstract `Gate` class. Every concrete gate derives
 
 ```text
                         Gate  (abstract)
-                  virtual evaluate() = 0
+                  virtual compute(inputs) = 0
                            |
      +----------+----------+----------+----------+----------+
      |          |          |          |          |          |
@@ -113,31 +110,11 @@ Signals flow through connections between component outputs and inputs:
 
 When a circuit is evaluated, each gate reads the values on its inputs, computes its result through its overridden virtual function, and passes the result on to the components it feeds.
 
-## Web Visual Editor
+## Frontend Shell
 
-Typical workflow:
+The current frontend provides the application frame, editor placeholder, and backend status. Circuit placement, wiring, simulation controls, and truth-table display are not part of this milestone.
 
-```text
- Open application
-        |
- Select a gate
-        |
- Place gate on canvas
-        |
- Add inputs and outputs
-        |
- Connect components with wires
-        |
- Set binary input values
-        |
- Run simulation
-        |
- View output
-        |
- Generate truth table
-```
-
-The visual connections on the canvas correspond directly to the circuit representation used by the C++ engine.
+The API client sends relative `/api/...` requests through Vite's development proxy. The browser does not evaluate gates; the C++ engine remains authoritative.
 
 ## OOP Concepts Demonstrated
 
@@ -179,17 +156,18 @@ Truth table for `A AND B` (generated from the circuit itself):
 
 ```text
 .
-├── CMakeLists.txt
-├── include/            # C++ headers (Gate, Circuit, Wire, gates, ...)
-├── src/                # C++ implementation
-├── tests/              # Unit tests for the simulation engine
-├── web/                # HTML, CSS, JavaScript frontend
-├── docs/               # Additional documentation
-├── .gitignore
-└── README.md
+|-- backend/
+|   |-- app/              # HTTP routes and JSON adapter
+|   |-- include/          # C++ engine headers
+|   |-- src/              # C++ engine implementation
+|   `-- tests/            # Engine, adapter, and HTTP tests
+|-- frontend/             # React, TypeScript, Vite frontend shell
+|-- third_party/          # Vendored C++ HTTP and JSON headers
+|-- CMakeLists.txt
+`-- README.md
 ```
 
-> This is the planned layout and may change as development progresses.
+The structure shown reflects the current repository.
 
 ## Getting Started
 
@@ -209,42 +187,63 @@ cmake -S . -B build
 cmake --build build
 ```
 
-### Run
+### Frontend Development
 
-Instructions for starting the application and opening the web interface will be added once the frontend and communication layer are implemented.
+Prerequisites: Node.js 20.19+ and npm.
+
+Install frontend packages and start Vite:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+In a separate terminal, build and start the C++ API server from the repository root:
+
+```powershell
+& 'C:\Program Files\CMake\bin\cmake.exe' -S . -B build-ucrt64 `
+  -G 'MinGW Makefiles' `
+  -DCMAKE_MAKE_PROGRAM='C:\msys64\ucrt64\bin\mingw32-make.exe' `
+  -DCMAKE_CXX_COMPILER='C:\msys64\ucrt64\bin\g++.exe'
+& 'C:\Program Files\CMake\bin\cmake.exe' --build build-ucrt64 --target digital_logic_server
+.\build-ucrt64\digital_logic_server.exe
+```
+
+Open the Vite URL shown in the terminal (normally `http://localhost:5173`). Vite proxies `/api` requests to `http://127.0.0.1:8080`, so the frontend uses relative API paths. The shell checks `/api/health` on startup and shows whether the C++ backend is available.
+
+## Current Development Status
+
+- The C++17 simulation engine supports combinational circuit validation, evaluation, and truth-table generation.
+- The C++ HTTP API exposes health, validation, simulation, and truth-table endpoints.
+- The React, TypeScript, Vite frontend shell checks backend connectivity and provides an editor placeholder.
+- Next work is the visual circuit editor.
 
 ## Development Roadmap
 
-Development is incremental. Each phase is completed and tested before the next begins.
-
-**C++ simulation engine**
+### Completed
 
 - [x] Phase 0: Repository setup and README
-- [ ] Phase 1: C++ project and CMake setup
-- [ ] Phase 2: Abstract `Gate` class
-- [ ] Phase 3: AND, OR, NOT gates
-- [ ] Phase 4: XOR, NAND, NOR gates
-- [ ] Phase 5: Input, Output and Wire
-- [ ] Phase 6: `Circuit` class
-- [ ] Phase 7: Circuit evaluation and signal propagation
-- [ ] Phase 8: Truth-table generation
-- [ ] Phase 9: Independent testing of the engine
+- [x] Phase 1: C++ project and CMake setup
+- [x] Phase 2: Abstract `Gate` class and AND, OR, NOT gates
+- [x] Phase 3: XOR, NAND, and NOR gates
+- [x] Phase 4: Input, Output, and Wire components
+- [x] Phase 5: Circuit class and structural validation
+- [x] Phase 6: Circuit evaluation and signal propagation
+- [x] Phase 7: Truth-table generation
+- [x] Phase 8: Independent engine testing and hardening
+- [x] Phase 9: HTTP/JSON adapter and C++ HTTP API (`/api/health`, `/api/validate`, `/api/simulate`, `/api/truth-table`)
+- [x] Phase 10: React, TypeScript, Vite frontend shell
 
-**Web application**
+### Future work
 
-- [ ] Phase 10: Web application foundation
 - [ ] Phase 11: Visual circuit canvas
 - [ ] Phase 12: Gate placement and movement
 - [ ] Phase 13: Visual wire connections
-- [ ] Phase 14: Connect frontend to the C++ engine
-- [ ] Phase 15: Interactive binary inputs and simulation
-- [ ] Phase 16: Truth-table visualization
-
-**Finishing**
-
-- [ ] Phase 17: Circuit validation and error handling
-- [ ] Phase 18: Save/load circuits (if time permits)
-- [ ] Phase 19: Final testing, documentation and UI improvements
+- [ ] Phase 14: Interactive binary inputs and simulation UI
+- [ ] Phase 15: Truth-table visualization
+- [ ] Phase 16: Circuit save/load
+- [ ] Phase 17: Final testing, documentation, and UI improvements
 
 ## Scope
 
