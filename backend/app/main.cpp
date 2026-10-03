@@ -1,15 +1,12 @@
 #include "httplib.h"
+#include "ApiRoutes.h"
 
 #include <iostream>
 
 int main() {
     httplib::Server server;
 
-    server.Get("/api/health", [](const httplib::Request&, httplib::Response& response) {
-        response.set_content(
-            R"({"status":"ok","service":"digital_logic_server"})",
-            "application/json");
-    });
+    digital_logic::app::register_api_routes(server);
 
     std::cout << "Starting digital_logic_server at http://127.0.0.1:8080\n";
     if (!server.listen("127.0.0.1", 8080)) {

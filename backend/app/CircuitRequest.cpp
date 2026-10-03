@@ -225,11 +225,8 @@ CircuitRequestParseResult parse_circuit_request_document(const Json& document) {
             if (value_field == json_component.end()) {
                 return parse_failure("invalid_request", path + ".value: required field is missing");
             }
-            if (!is_integer(*value_field)) {
-                return parse_failure("invalid_input_value", path + ".value: expected integer 0 or 1");
-            }
-            const std::int64_t value = value_field->get<std::int64_t>();
-            if (value != 0 && value != 1) {
+            std::size_t value = 0;
+            if (!parse_size(*value_field, value) || value > 1) {
                 return parse_failure("invalid_input_value", path + ".value: expected integer 0 or 1");
             }
             component.input_value = value == 0 ? Signal::Low : Signal::High;
@@ -366,7 +363,7 @@ CircuitBuildResult build_circuit(const CircuitRequest& request) {
             default:
                 throw std::invalid_argument("unsupported adapter component type");
             }
-        } catch (const std::exception& error) {
+        } catch (const std::invalid_argument& error) {
             const std::string message = error.what();
             result.errors.push_back({
                 message.find("duplicate component ID") != std::string::npos
@@ -383,7 +380,7 @@ CircuitBuildResult build_circuit(const CircuitRequest& request) {
         try {
             circuit->add_wire(Wire(wire.source_id, wire.destination_id,
                                    wire.destination_pin));
-        } catch (const std::exception& error) {
+        } catch (const std::invalid_argument& error) {
             result.errors.push_back({
                 "invalid_connection",
                 "wires[" + std::to_string(index) + "] (sourceId " +

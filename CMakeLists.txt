@@ -48,11 +48,17 @@ target_include_directories(nlohmann_json SYSTEM INTERFACE
 )
 target_compile_features(nlohmann_json INTERFACE cxx_std_17)
 
-add_executable(digital_logic_server backend/app/main.cpp)
+add_executable(digital_logic_server
+    backend/app/main.cpp
+    backend/app/CircuitRequest.cpp
+    backend/app/ApiRoutes.cpp
+)
+target_include_directories(digital_logic_server PRIVATE backend/app)
 target_link_libraries(digital_logic_server
     PRIVATE
         digital_logic_engine
         cpp_httplib
+        nlohmann_json
 )
 
 if(BUILD_TESTING)
@@ -71,6 +77,17 @@ if(BUILD_TESTING)
     add_test(NAME digital_logic_circuit_request_test
         COMMAND digital_logic_circuit_request_test
     )
+
+    add_executable(digital_logic_http_api_test
+        backend/app/CircuitRequest.cpp
+        backend/app/ApiRoutes.cpp
+        backend/tests/http_api_test.cpp
+    )
+    target_include_directories(digital_logic_http_api_test PRIVATE backend/app)
+    target_link_libraries(digital_logic_http_api_test
+        PRIVATE digital_logic_engine cpp_httplib nlohmann_json
+    )
+    add_test(NAME digital_logic_http_api_test COMMAND digital_logic_http_api_test)
 
     add_executable(digital_logic_smoke backend/tests/smoke.cpp)
     target_link_libraries(digital_logic_smoke PRIVATE digital_logic_engine)
