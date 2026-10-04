@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react'
-import type { EditorComponent, EditorState } from '../../types/editor'
-import { createEmptyEditorState } from '../../types/editor'
+import type { EditorComponent, EditorState, EditorWireDraft, EditorWireTarget } from '../../types/editor'
+import { canConnectComponents, componentHasOutput, createEmptyEditorState } from '../../types/editor'
 import ComponentInspector from './ComponentInspector'
 import ComponentNode from './ComponentNode'
+import WireLayer from './WireLayer'
+import { getOutputConnectionPosition } from './wireGeometry'
 import './CircuitEditor.css'
 
 type PaletteType = EditorComponent['type']
@@ -47,12 +49,20 @@ function ComponentPalette({ onAdd }: { onAdd: (type: PaletteType) => void }) {
 
 function CircuitCanvas({
   state,
+  wireDraft,
   onSelect,
   onMove,
+  onWireStart,
+  onWireMove,
+  onWireEnd,
 }: {
   state: EditorState
+  wireDraft: EditorWireDraft | null
   onSelect: (id: string) => void
   onMove: (id: string, x: number, y: number) => void
+  onWireStart: (sourceId: string) => void
+  onWireMove: (sourceId: string, x: number, y: number, target: EditorWireTarget | null) => void
+  onWireEnd: (sourceId: string, target: EditorWireTarget | null) => void
 }) {
   const canvasRef = useRef<HTMLDivElement>(null)
 
@@ -69,6 +79,12 @@ function CircuitCanvas({
         </div>
       </div>
       <div className="circuit-canvas" ref={canvasRef} role="region" aria-label="Circuit workspace">
+        <WireLayer
+          components={state.components}
+          wires={state.wires}
+          draft={wireDraft}
+          canvas={canvasRef.current}
+        />
         {state.components.length === 0 ? (
           <div className="canvas-empty-state">
             <span className="canvas-empty-icon" aria-hidden="true">+</span>
@@ -82,8 +98,12 @@ function CircuitCanvas({
             component={component}
             selected={state.selectedComponentId === component.id}
             canvas={canvasRef.current}
+            wireDraft={wireDraft}
             onSelect={onSelect}
             onMove={onMove}
+            onWireStart={onWireStart}
+            onWireMove={onWireMove}
+            onWireEnd={onWireEnd}
           />
         ))}
       </div>
@@ -120,6 +140,7 @@ function createComponent(type: PaletteType, id: string, components: EditorCompon
 
 export default function CircuitEditor() {
   const [editorState, setEditorState] = useState(createEmptyEditorState)
+  const [wireDraft, setWireDraft] = useState<EditorWireDraft | null>(null)
   const nextIdCounter = useRef(1n)
   const canvasWidth = typeof window === 'undefined' ? 500 : window.innerWidth - 470
 
@@ -147,6 +168,48 @@ export default function CircuitEditor() {
     }))
   }
 
+  const startWire = (sourceId: string) => {
+    const source = editorState.components.find((component) => component.id === sourceId)
+    if (!source || !componentHasOutput(source)) return
+    setEditorState((current) => ({ ...current, selectedComponentId: sourceId }))
+    setWireDraft({
+      sourceId,
+      pointer: getOutputConnectionPosition(source),
+      hoveredTarget: null,
+      targetIsValid: false,
+    })
+  }
+
+  const moveWire = (sourceId: string, x: number, y: number, target: EditorWireTarget | null) => {
+    const source = editorState.components.find((component) => component.id === sourceId)
+    const destination = target && editorState.components.find((component) => component.id === target.destinationId)
+    const targetIsValid = target !== null && !!source && !!destination &&
+      canConnectComponents(source, destination, target.destinationPin, editorState.wires)
+    setWireDraft((current) => current?.sourceId === sourceId
+      ? { ...current, pointer: { x, y }, hoveredTarget: target, targetIsValid }
+      : current)
+  }
+
+  const finishWire = (sourceId: string, target: EditorWireTarget | null) => {
+    setWireDraft(null)
+    if (!target) return
+    setEditorState((current) => {
+      const source = current.components.find((component) => component.id === sourceId)
+      const destination = current.components.find((component) => component.id === target.destinationId)
+      if (!source || !destination || !canConnectComponents(source, destination, target.destinationPin, current.wires)) {
+        return current
+      }
+      return {
+        ...current,
+        wires: [...current.wires, {
+          sourceId,
+          destinationId: target.destinationId,
+          destinationPin: target.destinationPin,
+        }],
+      }
+    })
+  }
+
   const selectedComponent = editorState.components.find(
     (component) => component.id === editorState.selectedComponentId,
   ) ?? null
@@ -166,7 +229,15 @@ export default function CircuitEditor() {
       </div>
       <div className="editor-grid">
         <ComponentPalette onAdd={addComponent} />
-        <CircuitCanvas state={editorState} onSelect={selectComponent} onMove={moveComponent} />
+        <CircuitCanvas
+          state={editorState}
+          wireDraft={wireDraft}
+          onSelect={selectComponent}
+          onMove={moveComponent}
+          onWireStart={startWire}
+          onWireMove={moveWire}
+          onWireEnd={finishWire}
+        />
         <ComponentInspector component={selectedComponent} />
       </div>
     </section>

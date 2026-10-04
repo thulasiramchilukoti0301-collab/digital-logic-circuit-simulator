@@ -36,6 +36,18 @@ export interface EditorWire {
   destinationPin: number
 }
 
+export interface EditorWireTarget {
+  destinationId: string
+  destinationPin: number
+}
+
+export interface EditorWireDraft {
+  sourceId: string
+  pointer: EditorPosition
+  hoveredTarget: EditorWireTarget | null
+  targetIsValid: boolean
+}
+
 export interface EditorState {
   components: EditorComponent[]
   wires: EditorWire[]
@@ -48,6 +60,30 @@ export function createEmptyEditorState(): EditorState {
     wires: [],
     selectedComponentId: null,
   }
+}
+
+export function getComponentInputCount(component: EditorComponent): number {
+  if (component.type === 'input') return 0
+  if (component.type === 'output') return 1
+  return component.inputCount
+}
+
+export function componentHasOutput(component: EditorComponent): boolean {
+  return component.type !== 'output'
+}
+
+export function canConnectComponents(
+  source: EditorComponent,
+  destination: EditorComponent,
+  destinationPin: number,
+  wires: EditorWire[],
+): boolean {
+  return source.id !== destination.id &&
+    componentHasOutput(source) &&
+    Number.isInteger(destinationPin) &&
+    destinationPin >= 0 &&
+    destinationPin < getComponentInputCount(destination) &&
+    !wires.some((wire) => wire.destinationId === destination.id && wire.destinationPin === destinationPin)
 }
 
 /** Maps editor data to the backend request schema; simulation remains in C++. */

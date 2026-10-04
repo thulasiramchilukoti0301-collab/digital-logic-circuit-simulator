@@ -148,7 +148,7 @@
   position: absolute;
   z-index: 1;
   width: 108px;
-  min-height: 70px;
+  height: 76px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -168,6 +168,7 @@
   box-shadow: 0 3px 9px rgba(30, 45, 36, .06);
 }
 .canvas-component:active { cursor: grabbing; }
+.canvas-component:focus-visible { outline: 2px solid rgba(52, 137, 99, .45); outline-offset: 2px; }
 .canvas-component--input { border-left-color: #d6a448; }
 .canvas-component--output { border-left-color: #708da9; }
 .canvas-component:hover { border-color: #b5d7c3; }
@@ -180,6 +181,29 @@
 .canvas-component-name { max-width: 100%; overflow: hidden; color: #475350; font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-component-value,
 .canvas-component-pins { color: #8b9691; font-size: 8px; }
+.connection-point {
+  position: absolute;
+  z-index: 3;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #8cae99;
+  box-shadow: 0 0 0 1px #82a78f;
+  cursor: crosshair;
+  touch-action: none;
+}
+.connection-point--input { left: 0; transform: translate(-50%, -50%); background: #d2a149; box-shadow: 0 0 0 1px #bd8c32; }
+.connection-point--output { right: 0; top: 50%; transform: translate(50%, -50%); }
+.connection-point:hover,
+.connection-point--active { width: 16px; height: 16px; }
+.connection-point--valid { background: #2e9a68; box-shadow: 0 0 0 2px rgba(46, 154, 104, .22); }
+.connection-point--invalid { background: #d8755d; box-shadow: 0 0 0 2px rgba(216, 117, 93, .2); }
+.wire-layer { position: absolute; z-index: 0; top: 0; left: 0; overflow: hidden; pointer-events: none; }
+.committed-wire { fill: none; stroke: #608b72; stroke-width: 2.2; stroke-linecap: round; }
+.temporary-wire { fill: none; stroke: #d49d35; stroke-width: 2; stroke-dasharray: 5 4; stroke-linecap: round; }
+.temporary-wire--valid { stroke: #2e9a68; }
 .canvas-status { gap: 7px; padding-top: 11px; color: #87918d; font-size: 9px; }
 .canvas-status .status-dot { width: 6px; height: 6px; background: #c4cec8; }
 
