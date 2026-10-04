@@ -1,16 +1,67 @@
-import type { CSSProperties } from 'react'
+import { useRef } from 'react'
+import type { CSSProperties, PointerEvent } from 'react'
 import type { EditorComponent } from '../../types/editor'
 
 interface ComponentNodeProps {
   component: EditorComponent
   selected: boolean
+  canvas: HTMLDivElement | null
   onSelect: (id: string) => void
+  onMove: (id: string, x: number, y: number) => void
 }
 
-export default function ComponentNode({ component, selected, onSelect }: ComponentNodeProps) {
+interface DragState {
+  pointerId: number
+  grabOffsetX: number
+  grabOffsetY: number
+}
+
+export default function ComponentNode({ component, selected, canvas, onSelect, onMove }: ComponentNodeProps) {
+  const dragState = useRef<DragState | null>(null)
   const style: CSSProperties = {
     left: component.position.x,
     top: component.position.y,
+  }
+
+  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || !canvas) return
+    event.preventDefault()
+    onSelect(component.id)
+
+    const nodeBounds = event.currentTarget.getBoundingClientRect()
+    dragState.current = {
+      pointerId: event.pointerId,
+      grabOffsetX: event.clientX - nodeBounds.left,
+      grabOffsetY: event.clientY - nodeBounds.top,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const handlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    const activeDrag = dragState.current
+    if (!canvas || !activeDrag || event.pointerId !== activeDrag.pointerId) return
+
+    const canvasBounds = canvas.getBoundingClientRect()
+    const width = event.currentTarget.offsetWidth
+    const height = event.currentTarget.offsetHeight
+    const minX = canvas.scrollLeft
+    const minY = canvas.scrollTop
+    const maxX = Math.max(minX, minX + canvas.clientWidth - width)
+    const maxY = Math.max(minY, minY + canvas.clientHeight - height)
+    const pointerX = event.clientX - canvasBounds.left - canvas.clientLeft + canvas.scrollLeft - activeDrag.grabOffsetX
+    const pointerY = event.clientY - canvasBounds.top - canvas.clientTop + canvas.scrollTop - activeDrag.grabOffsetY
+    const x = Math.min(maxX, Math.max(minX, pointerX))
+    const y = Math.min(maxY, Math.max(minY, pointerY))
+
+    onMove(component.id, x, y)
+  }
+
+  const finishDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    if (dragState.current?.pointerId !== event.pointerId) return
+    dragState.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
   }
 
   return (
@@ -19,6 +70,12 @@ export default function ComponentNode({ component, selected, onSelect }: Compone
       type="button"
       style={style}
       onClick={() => onSelect(component.id)}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishDrag}
+      onPointerCancel={finishDrag}
+      onLostPointerCapture={() => { dragState.current = null }}
+      onDragStart={(event) => event.preventDefault()}
       aria-pressed={selected}
       aria-label={`Select ${component.type} ${component.name}`}
     >

@@ -48,10 +48,14 @@ function ComponentPalette({ onAdd }: { onAdd: (type: PaletteType) => void }) {
 function CircuitCanvas({
   state,
   onSelect,
+  onMove,
 }: {
   state: EditorState
   onSelect: (id: string) => void
+  onMove: (id: string, x: number, y: number) => void
 }) {
+  const canvasRef = useRef<HTMLDivElement>(null)
+
   return (
     <section className="canvas-panel" aria-labelledby="canvas-title">
       <div className="canvas-toolbar">
@@ -64,7 +68,7 @@ function CircuitCanvas({
           <span>{state.wires.length} wires</span>
         </div>
       </div>
-      <div className="circuit-canvas" role="region" aria-label="Circuit workspace">
+      <div className="circuit-canvas" ref={canvasRef} role="region" aria-label="Circuit workspace">
         {state.components.length === 0 ? (
           <div className="canvas-empty-state">
             <span className="canvas-empty-icon" aria-hidden="true">+</span>
@@ -77,7 +81,9 @@ function CircuitCanvas({
             key={component.id}
             component={component}
             selected={state.selectedComponentId === component.id}
+            canvas={canvasRef.current}
             onSelect={onSelect}
+            onMove={onMove}
           />
         ))}
       </div>
@@ -131,6 +137,16 @@ export default function CircuitEditor() {
     setEditorState((current) => ({ ...current, selectedComponentId: id }))
   }
 
+  const moveComponent = (id: string, x: number, y: number) => {
+    setEditorState((current) => ({
+      ...current,
+      components: current.components.map((component) =>
+        component.id === id ? { ...component, position: { x, y } } : component,
+      ),
+      selectedComponentId: id,
+    }))
+  }
+
   const selectedComponent = editorState.components.find(
     (component) => component.id === editorState.selectedComponentId,
   ) ?? null
@@ -150,7 +166,7 @@ export default function CircuitEditor() {
       </div>
       <div className="editor-grid">
         <ComponentPalette onAdd={addComponent} />
-        <CircuitCanvas state={editorState} onSelect={selectComponent} />
+        <CircuitCanvas state={editorState} onSelect={selectComponent} onMove={moveComponent} />
         <ComponentInspector component={selectedComponent} />
       </div>
     </section>

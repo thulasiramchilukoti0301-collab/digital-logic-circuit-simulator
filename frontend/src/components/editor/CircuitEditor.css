@@ -161,9 +161,13 @@
   color: var(--ink);
   text-align: left;
   font: inherit;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
   box-shadow: 0 3px 9px rgba(30, 45, 36, .06);
 }
+.canvas-component:active { cursor: grabbing; }
 .canvas-component--input { border-left-color: #d6a448; }
 .canvas-component--output { border-left-color: #708da9; }
 .canvas-component:hover { border-color: #b5d7c3; }
