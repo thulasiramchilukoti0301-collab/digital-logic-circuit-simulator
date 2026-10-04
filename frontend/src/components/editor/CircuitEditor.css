@@ -181,6 +181,31 @@
 .canvas-component-name { max-width: 100%; overflow: hidden; color: #475350; font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-component-value,
 .canvas-component-pins { color: #8b9691; font-size: 8px; }
+.input-value-control {
+  width: 64px;
+  min-height: 19px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  padding: 1px 5px;
+  border: 1px solid #dfe4e0;
+  border-radius: 5px;
+  background: #f2f4f2;
+  color: #66716c;
+  font: inherit;
+  font-size: 8px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.input-value-control strong { color: #59645f; font-size: 9px; }
+.input-value-control--1 { border-color: #b9dfc9; background: #e8f6ee; color: #387653; }
+.input-value-control--1 strong { color: #216741; }
+.input-value-control:hover { border-color: var(--green); }
+.input-value-control:focus-visible { outline: 2px solid rgba(52, 137, 99, .4); outline-offset: 1px; }
 .connection-point {
   position: absolute;
   z-index: 3;

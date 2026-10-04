@@ -3,6 +3,7 @@ import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
 import type { EditorComponent, EditorWireDraft, EditorWireTarget } from '../../types/editor'
 import { componentHasOutput, getComponentInputCount } from '../../types/editor'
 import ConnectionPoint from './ConnectionPoint'
+import InputValueControl from './InputValueControl'
 import { clientPointToCanvas } from './wireGeometry'
 
 interface ComponentNodeProps {
@@ -15,6 +16,7 @@ interface ComponentNodeProps {
   onWireStart: (sourceId: string) => void
   onWireMove: (sourceId: string, x: number, y: number, target: EditorWireTarget | null) => void
   onWireEnd: (sourceId: string, target: EditorWireTarget | null) => void
+  onInputValueChange: (inputId: string, value: 0 | 1) => void
 }
 
 interface DragState {
@@ -33,6 +35,7 @@ export default function ComponentNode({
   onWireStart,
   onWireMove,
   onWireEnd,
+  onInputValueChange,
 }: ComponentNodeProps) {
   const dragState = useRef<DragState | null>(null)
   const style: CSSProperties = {
@@ -123,7 +126,12 @@ export default function ComponentNode({
     >
       <span className="canvas-component-symbol" aria-hidden="true">{component.type.toUpperCase()}</span>
       <span className="canvas-component-name">{component.name}</span>
-      {component.type === 'input' && <span className="canvas-component-value">Value: {component.value}</span>}
+      {component.type === 'input' && (
+        <InputValueControl
+          value={component.value}
+          onToggle={() => onInputValueChange(component.id, component.value === 0 ? 1 : 0)}
+        />
+      )}
       {'inputCount' in component && <span className="canvas-component-pins">{component.inputCount} inputs</span>}
       {Array.from({ length: inputCount }, (_, pin) => (
         <ConnectionPoint

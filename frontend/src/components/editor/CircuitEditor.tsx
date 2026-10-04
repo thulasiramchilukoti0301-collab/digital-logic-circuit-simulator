@@ -55,6 +55,7 @@ function CircuitCanvas({
   onWireStart,
   onWireMove,
   onWireEnd,
+  onInputValueChange,
 }: {
   state: EditorState
   wireDraft: EditorWireDraft | null
@@ -63,6 +64,7 @@ function CircuitCanvas({
   onWireStart: (sourceId: string) => void
   onWireMove: (sourceId: string, x: number, y: number, target: EditorWireTarget | null) => void
   onWireEnd: (sourceId: string, target: EditorWireTarget | null) => void
+  onInputValueChange: (inputId: string, value: 0 | 1) => void
 }) {
   const canvasRef = useRef<HTMLDivElement>(null)
 
@@ -104,6 +106,7 @@ function CircuitCanvas({
             onWireStart={onWireStart}
             onWireMove={onWireMove}
             onWireEnd={onWireEnd}
+            onInputValueChange={onInputValueChange}
           />
         ))}
       </div>
@@ -210,6 +213,18 @@ export default function CircuitEditor() {
     })
   }
 
+  const updateInputValue = (inputId: string, value: 0 | 1) => {
+    setEditorState((current) => ({
+      ...current,
+      components: current.components.map((component) =>
+        component.id === inputId && component.type === 'input'
+          ? { ...component, value }
+          : component,
+      ),
+      selectedComponentId: inputId,
+    }))
+  }
+
   const selectedComponent = editorState.components.find(
     (component) => component.id === editorState.selectedComponentId,
   ) ?? null
@@ -237,6 +252,7 @@ export default function CircuitEditor() {
           onWireStart={startWire}
           onWireMove={moveWire}
           onWireEnd={finishWire}
+          onInputValueChange={updateInputValue}
         />
         <ComponentInspector component={selectedComponent} />
       </div>
