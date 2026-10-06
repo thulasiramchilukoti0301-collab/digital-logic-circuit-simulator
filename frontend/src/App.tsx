@@ -22,6 +22,8 @@ function App() {
     void checkBackend()
   }, [checkBackend])
 
+  const markBackendUnavailable = useCallback(() => setBackendState('unavailable'), [])
+
   const statusText = {
     checking: 'Checking connection',
     connected: 'Backend connected',
@@ -62,7 +64,7 @@ function App() {
         <div className="authority-note"><span /> C++17 ENGINE · AUTHORITATIVE SIMULATION</div>
       </section>
 
-      <CircuitEditor />
+      <CircuitEditor backendState={backendState} onBackendUnavailable={markBackendUnavailable} />
 
       <footer className="footer">
         <span>React · TypeScript · Vite</span>

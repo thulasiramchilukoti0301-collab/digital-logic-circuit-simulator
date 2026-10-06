@@ -2,8 +2,10 @@ import { useRef } from 'react'
 import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
 import type { EditorComponent, EditorWireDraft, EditorWireTarget } from '../../types/editor'
 import { componentHasOutput, getComponentInputCount } from '../../types/editor'
+import type { BinaryValue } from '../../types/api'
 import ConnectionPoint from './ConnectionPoint'
 import InputValueControl from './InputValueControl'
+import OutputValueDisplay from './OutputValueDisplay'
 import { clientPointToCanvas } from './wireGeometry'
 
 interface ComponentNodeProps {
@@ -11,6 +13,8 @@ interface ComponentNodeProps {
   selected: boolean
   canvas: HTMLDivElement | null
   wireDraft: EditorWireDraft | null
+  simulationValue?: BinaryValue
+  simulationStale: boolean
   onSelect: (id: string) => void
   onMove: (id: string, x: number, y: number) => void
   onWireStart: (sourceId: string) => void
@@ -30,6 +34,8 @@ export default function ComponentNode({
   selected,
   canvas,
   wireDraft,
+  simulationValue,
+  simulationStale,
   onSelect,
   onMove,
   onWireStart,
@@ -132,6 +138,7 @@ export default function ComponentNode({
           onToggle={() => onInputValueChange(component.id, component.value === 0 ? 1 : 0)}
         />
       )}
+      {component.type === 'output' && <OutputValueDisplay value={simulationValue} stale={simulationStale} />}
       {'inputCount' in component && <span className="canvas-component-pins">{component.inputCount} inputs</span>}
       {Array.from({ length: inputCount }, (_, pin) => (
         <ConnectionPoint
