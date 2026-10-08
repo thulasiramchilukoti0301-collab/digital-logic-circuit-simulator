@@ -1,10 +1,8 @@
 # Digital Logic Circuit Simulator
 
-The project combines a complete C++17 combinational simulation engine and local HTTP API with a React, TypeScript, Vite frontend shell. The C++ engine is authoritative for circuit validation, simulation, and truth-table results. The visual editor is future work.
+An academic digital logic simulator with a C++17 simulation engine, a local HTTP API, a React/TypeScript visual editor, and SQLite-backed circuit persistence.
 
-**Core:** C++17, CMake, STL | **Frontend:** React, TypeScript, Vite | **Status:** In development
-
----
+**Core:** C++17, CMake, SQLite | **Frontend:** React, TypeScript, Vite | **Project status:** In development
 
 ## Table of Contents
 
@@ -12,130 +10,122 @@ The project combines a complete C++17 combinational simulation engine and local 
 - [Features](#features)
 - [Supported Components](#supported-components)
 - [System Architecture](#system-architecture)
-- [C++ Simulation Engine](#c-simulation-engine)
-- [Frontend Shell](#frontend-shell)
-- [OOP Concepts Demonstrated](#oop-concepts-demonstrated)
+- [C++ Simulation Engine and OOP](#c-simulation-engine-and-oop)
+- [Circuit Editor](#circuit-editor)
+- [Persistence API and Database](#persistence-api-and-database)
 - [Example Circuit](#example-circuit)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
-- [Frontend Development](#frontend-development)
+- [Windows MSYS2 UCRT64 Setup](#windows-msys2-ucrt64-setup)
 - [Current Development Status](#current-development-status)
 - [Development Roadmap](#development-roadmap)
 - [Scope](#scope)
 - [Authors](#authors)
 
----
-
 ## Overview
 
-The Digital Logic Circuit Simulator includes a browser shell that checks its connection to the local C++ server. The interactive circuit editor has not been implemented yet.
-
-The project has two layers:
-
-1. **C++ digital logic simulation engine:** the academic and technical core. It models gates, wires, inputs, outputs and circuits using object-oriented design, and is the single authoritative source of simulation results.
-2. **React, TypeScript, Vite frontend shell:** a presentation layer with a backend connection check and an API client prepared for future editor interactions. It contains no gate logic.
+The browser editor places and connects circuit components, presents component details, and sends validation and simulation requests to the local C++ server. C++ is the authoritative implementation of gate evaluation, circuit validation, simulation, and truth-table generation. SQLite stores saved editor circuits; it does not participate in evaluation.
 
 ## Features
 
-**Simulation engine (C++17)**
+**C++ simulation engine and API**
 
-- Abstract `Gate` base class with a common virtual evaluation interface
-- Concrete gates: AND, OR, NOT, XOR, NAND, NOR
-- Binary inputs, outputs and wires/connections
-- Signal propagation through connected components
-- Circuit evaluation and validation
-- Truth-table generation based on the actual circuit (never hardcoded)
-- Easy to add new gates without modifying core `Circuit` logic
+- C++17 combinational circuit model with validation, evaluation, and generated truth tables.
+- HTTP endpoints for health, validation, simulation, and truth-table generation.
+- Structured JSON requests and responses through the local C++ API.
 
-**Frontend shell (React, TypeScript, Vite)**
+**React/TypeScript editor**
 
-- Responsive application shell with a circuit-editor placeholder
-- Startup health check with connected/unavailable status and retry action
-- Typed API client for health, validation, simulation, and truth-table endpoints
-- Vite development proxy to the local C++ server
+- Add inputs, outputs, and gates by clicking items in the component palette.
+- Drag existing components to reposition them and connect component pins by drawing wires.
+- Toggle binary input values, select components, and inspect their type, ID, name, position, input count, or value. The inspector is read-only; component renaming is not currently available.
+- Validate and simulate through the C++ API. Truth-table generation is available in the backend API; a truth-table display is not yet implemented in the frontend.
+
+**SQLite persistence**
+
+- Name and save a new circuit, list saved circuits, open a circuit, and save changes to the currently opened circuit.
+- Restore component IDs, types, names, positions, gate input counts, input values, and wires.
+- Save unfinished circuits with unconnected pins. Persistence checks document structure and references without requiring simulation validation.
+- Confirm before replacing unsaved changes. Opening a circuit clears transient simulation results.
+- Circuit persistence is implemented and Mac browser checks are complete. It remains on `feat/circuit-persistence`; it has not yet been committed or merged.
 
 ## Supported Components
 
-| Component | Inputs | Output |
-|-----------|--------|--------|
-| AND   | 2+ | `1` only when all inputs are `1` |
-| OR    | 2+ | `1` when at least one input is `1` |
-| NOT   | 1  | Complement of the input |
-| XOR   | 2  | `1` when the inputs differ |
-| NAND  | 2+ | Complement of AND |
-| NOR   | 2+ | Complement of OR |
-| INPUT | 0  | User-set value, `0` or `1` |
-| OUTPUT| 1  | Displays the value of the signal connected to it |
+| Component | Gate input count | Behavior |
+|-----------|------------------|----------|
+| AND | 2 or more | High only when every input is high |
+| OR | 2 or more | High when at least one input is high |
+| NOT | 1 | Inverts its input |
+| XOR | 2 | High when its inputs differ |
+| NAND | 2 or more | Inverts the AND result |
+| NOR | 2 or more | Inverts the OR result |
+| INPUT | 0 | User-set binary value, `0` or `1` |
+| OUTPUT | 1 | Displays the connected signal after simulation |
 
 ## System Architecture
 
 ```text
-        Web Browser (React application shell)
-                     |
-                     |  API / communication layer
-                     v
-        C++ Application / Simulation Engine
-                     |
-                     v
-               Circuit Model
-                     |
-        +------------+-------------+
-        |            |             |
-      Gates        Wires     Inputs / Outputs
+Browser
+┌───────────────────────────────┐
+│ React / TypeScript circuit UI │
+│ placement · dragging · wiring │
+│ input controls · saved list   │
+└──────────────┬────────────────┘
+               │ HTTP / JSON
+               ▼
+┌───────────────────────────────┐
+│ C++ HTTP API                  │
+│ validate · simulate · tables  │
+│ circuit save/list/open/update │
+└──────────────┬────────────────┘
+               │                 │
+               ▼                 ▼
+┌──────────────────────┐  ┌──────────────────────┐
+│ C++ circuit engine   │  │ SQLite repository    │
+│ validation/evaluation│  │ circuits/components/ │
+│ truth-table creation │  │ wires                │
+└──────────────────────┘  └──────────────────────┘
 ```
 
-The browser communicates with the C++ application through its local HTTP API. The current shell checks the backend health endpoint; its API client also defines calls for validation, simulation, and truth tables. The future editor will own presentation and interaction, while validation, simulation, and truth-table generation remain in the C++ engine.
+Circuit validation, gate evaluation, simulation, and truth-table generation stay in the C++ engine. Persistence validation is a separate API-layer check so incomplete circuits can be saved. The SQLite repository uses relational tables, foreign keys, constraints, prepared statements, and transactions for saves and updates.
 
-## C++ Simulation Engine
+## C++ Simulation Engine and OOP
 
-The engine is built around an abstract `Gate` class. Every concrete gate derives directly from it, and the `Circuit` works with gates only through the base-class abstraction, never through concrete types.
+The engine models components through polymorphic C++ classes. `Component` provides the shared component ID and a virtual destructor. `Gate` derives from `Component` and declares the pure virtual `compute` interface; AND, OR, NOT, XOR, NAND, and NOR gates implement it. `Input` and `Output` are also component subclasses.
 
-```text
-                        Gate  (abstract)
-                  virtual compute(inputs) = 0
-                           |
-     +----------+----------+----------+----------+----------+
-     |          |          |          |          |          |
-  ANDGate    ORGate     NOTGate    XORGate    NANDGate   NORGate
-```
+`Circuit` owns components through `std::unique_ptr<Component>` and stores wires as values. It works through the component and gate abstractions and uses standard library containers for circuit data and evaluation. Gate-specific evaluation remains in the corresponding gate implementations.
 
-Signals flow through connections between component outputs and inputs:
+| OOP concept | Implementation |
+|-------------|----------------|
+| Abstraction | `Component` and the pure virtual `Gate::compute` interface |
+| Inheritance | Concrete gates, `Input`, and `Output` derive from `Component` directly or through `Gate` |
+| Runtime polymorphism | `Circuit` stores base-class component pointers and dispatches virtual gate computation |
+| Encapsulation | Component IDs, input values, and names are accessed through class interfaces |
+| Composition and ownership | `Circuit` owns components with `std::unique_ptr` and contains its wires |
+| STL and modular design | Standard containers and separate headers/source files organize circuit and gate behavior |
 
-```text
- A ──┐
-     ├──► [ AND ] ──┐
- B ──┘              ├──► [ OR ] ──► OUTPUT
- C ─────────────────┘
-```
+## Circuit Editor
 
-When a circuit is evaluated, each gate reads the values on its inputs, computes its result through its overridden virtual function, and passes the result on to the components it feeds.
+Click a palette item to place a component in the workspace. Drag a placed component to move it. Start from an output connection point and connect to an unconnected input pin to create a wire. Input controls toggle between `0` and `1`. Select a component to view its details in the inspector.
 
-## Frontend Shell
+The editor sends validation and simulation requests through the Vite `/api` proxy. It does not evaluate logic in JavaScript. The backend exposes truth-table generation, but truth-table UI remains future work.
 
-The current frontend provides the application frame, editor placeholder, and backend status. Circuit placement, wiring, simulation controls, and truth-table display are not part of this milestone.
+## Persistence API and Database
 
-The API client sends relative `/api/...` requests through Vite's development proxy. The browser does not evaluate gates; the C++ engine remains authoritative.
+- `GET /api/circuits` lists saved circuit summaries with `id`, `name`, and `updatedAt`.
+- `POST /api/circuits` creates a saved circuit from `{ "name": "...", "circuit": { "version": 1, "components": [], "wires": [] } }`. Duplicate names return HTTP 409.
+- `GET /api/circuits/{id}` returns the saved circuit and its component/wire document.
+- `PUT /api/circuits/{id}` replaces the explicitly selected circuit atomically. A missing ID returns HTTP 404.
 
-## OOP Concepts Demonstrated
+The database has `circuits`, `components`, and `wires` tables. Components and wires reference their parent circuit; wire endpoints reference components. Updates remove existing wires before components and replace the contents in one transaction. The database is accessed through CMake's `SQLite3::SQLite3` imported target and remains separate from the simulation engine.
 
-| Concept | Where it is used |
-|---------|------------------|
-| Abstraction | `Gate` defines the common evaluation interface |
-| Inheritance | Each specific gate derives from `Gate` |
-| Runtime polymorphism / dynamic binding | Circuit evaluates gates through base-class references and pointers |
-| Virtual functions | Gate evaluation is overridden in each derived gate |
-| Virtual destructors | Safe cleanup of derived objects through base pointers |
-| Encapsulation | Component state kept private behind clean interfaces |
-| Composition | `Circuit` is composed of gates, wires, inputs and outputs |
-| STL containers | Storage and lookup of components and connections |
-| Smart pointers | Ownership of gates and other components |
-| Modular design | Separate headers and sources per component |
+The database defaults to `data/circuits.sqlite3`. Set `DIGITAL_LOGIC_DB_PATH` to select another database file; the server creates parent directories as needed. Runtime database files and SQLite journal, WAL, and SHM sidecars are ignored by Git.
 
 ## Example Circuit
 
 Circuit: `OUTPUT = (A AND B) OR C`
 
-With `A = 1`, `B = 1`, `C = 0`:
+With `A = 1`, `B = 1`, and `C = 0`:
 
 ```text
 AND(1, 1) = 1
@@ -143,7 +133,7 @@ OR(1, 0)  = 1
 OUTPUT    = 1
 ```
 
-Truth table for `A AND B` (generated from the circuit itself):
+The backend can also generate truth-table rows from a circuit. For `A AND B`:
 
 | A | B | Output |
 |---|---|--------|
@@ -157,97 +147,96 @@ Truth table for `A AND B` (generated from the circuit itself):
 ```text
 .
 |-- backend/
-|   |-- app/              # HTTP routes and JSON adapter
+|   |-- app/              # HTTP routes, request adapter, SQLite repository
 |   |-- include/          # C++ engine headers
 |   |-- src/              # C++ engine implementation
-|   `-- tests/            # Engine, adapter, and HTTP tests
-|-- frontend/             # React, TypeScript, Vite frontend shell
-|-- third_party/          # Vendored C++ HTTP and JSON headers
+|   `-- tests/            # Engine, adapter, repository, and HTTP tests
+|-- frontend/             # React, TypeScript, Vite visual editor
+|-- third_party/          # Vendored cpp-httplib and nlohmann/json headers
 |-- CMakeLists.txt
 `-- README.md
 ```
 
-The structure shown reflects the current repository.
-
 ## Getting Started
 
-### Prerequisites
+### Requirements
 
-- A C++17-compatible compiler (GCC 9+, Clang 10+, or MSVC 2019+)
-- CMake 3.15 or newer
-- A modern web browser
+- C++17 compiler and CMake 3.15 or newer
+- SQLite development headers and library discoverable by CMake
+- Node.js 20.19+ and npm
+- Modern web browser
 
-### Build the C++ engine
+### macOS
 
-```bash
-git clone https://github.com/<your-username>/<repo-name>.git
-cd <repo-name>
+CMake uses the SQLite headers and library available to the selected toolchain. With Apple Command Line Tools installed:
 
+```sh
 cmake -S . -B build
 cmake --build build
+ctest --test-dir build --output-on-failure
+./build/digital_logic_server
 ```
 
-### Frontend Development
+In a separate terminal, start the frontend:
 
-Prerequisites: Node.js 20.19+ and npm.
-
-Install frontend packages and start Vite:
-
-```powershell
+```sh
 cd frontend
 npm install
 npm run dev
 ```
 
-In a separate terminal, build and start the C++ API server from the repository root:
+Open the Vite URL shown in the terminal, normally `http://localhost:5173`. Vite proxies API requests to `http://127.0.0.1:8080`.
 
-```powershell
-& 'C:\Program Files\CMake\bin\cmake.exe' -S . -B build-ucrt64 `
-  -G 'MinGW Makefiles' `
-  -DCMAKE_MAKE_PROGRAM='C:\msys64\ucrt64\bin\mingw32-make.exe' `
-  -DCMAKE_CXX_COMPILER='C:\msys64\ucrt64\bin\g++.exe'
-& 'C:\Program Files\CMake\bin\cmake.exe' --build build-ucrt64 --target digital_logic_server
-.\build-ucrt64\digital_logic_server.exe
+### Windows MSYS2 UCRT64 Setup
+
+Install the compiler, CMake, Make, and SQLite development package in the MSYS2 UCRT64 environment:
+
+```sh
+pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-make mingw-w64-ucrt-x86_64-sqlite3
 ```
 
-Open the Vite URL shown in the terminal (normally `http://localhost:5173`). Vite proxies `/api` requests to `http://127.0.0.1:8080`, so the frontend uses relative API paths. The shell checks `/api/health` on startup and shows whether the C++ backend is available.
+From the UCRT64 shell, configure and build using that environment's toolchain and SQLite package:
+
+```sh
+cmake -S . -B build-ucrt64 -G "MinGW Makefiles"
+cmake --build build-ucrt64
+ctest --test-dir build-ucrt64 --output-on-failure
+./build-ucrt64/digital_logic_server.exe
+```
+
+Start Vite in another terminal with `cd frontend`, `npm install`, and `npm run dev`. Windows build and browser testing remain pending; Windows setup instructions have not been validated on Windows.
 
 ## Current Development Status
 
-- The C++17 simulation engine supports combinational circuit validation, evaluation, and truth-table generation.
-- The C++ HTTP API exposes health, validation, simulation, and truth-table endpoints.
-- The React, TypeScript, Vite frontend shell checks backend connectivity and provides an editor placeholder.
-- Next work is the visual circuit editor.
+- The C++17 engine supports circuit validation, evaluation, signal propagation, and truth-table generation.
+- The C++ HTTP API exposes health, validation, simulation, truth-table, and SQLite circuit persistence endpoints.
+- The React editor supports palette-click component placement, component dragging, visual wiring, input toggles, inspection, validation, and simulation.
+- SQLite save/list/open/update is implemented, including persistence of unfinished circuits. Mac browser checks are complete.
+- Truth-table UI remains pending. Windows testing remains pending.
+- The persistence feature is on `feat/circuit-persistence` and is not yet committed or merged.
 
 ## Development Roadmap
 
 ### Completed
 
-- [x] Phase 0: Repository setup and README
-- [x] Phase 1: C++ project and CMake setup
-- [x] Phase 2: Abstract `Gate` class and AND, OR, NOT gates
-- [x] Phase 3: XOR, NAND, and NOR gates
-- [x] Phase 4: Input, Output, and Wire components
-- [x] Phase 5: Circuit class and structural validation
-- [x] Phase 6: Circuit evaluation and signal propagation
-- [x] Phase 7: Truth-table generation
-- [x] Phase 8: Independent engine testing and hardening
-- [x] Phase 9: HTTP/JSON adapter and C++ HTTP API (`/api/health`, `/api/validate`, `/api/simulate`, `/api/truth-table`)
-- [x] Phase 10: React, TypeScript, Vite frontend shell
+- [x] Repository and CMake project setup
+- [x] Abstract gate model and AND, OR, NOT, XOR, NAND, and NOR gates
+- [x] Input, Output, Wire, and Circuit classes
+- [x] Circuit validation, evaluation, signal propagation, and truth-table generation
+- [x] HTTP/JSON API for health, validation, simulation, and truth tables
+- [x] React/TypeScript visual circuit editor with component placement, dragging, wiring, input controls, inspection, validation, and simulation integration
+- [x] SQLite circuit save/list/open/update with transactional persistence and unfinished-circuit support
 
-### Future work
+### Remaining
 
-- [ ] Phase 11: Visual circuit canvas
-- [ ] Phase 12: Gate placement and movement
-- [ ] Phase 13: Visual wire connections
-- [ ] Phase 14: Interactive binary inputs and simulation UI
-- [ ] Phase 15: Truth-table visualization
-- [ ] Phase 16: Circuit save/load
-- [ ] Phase 17: Final testing, documentation, and UI improvements
+- [ ] Truth-table visualization in the frontend
+- [ ] Windows build and browser verification
+- [ ] Commit and merge the circuit-persistence feature
+- [ ] Further UI refinement and final project review
 
 ## Scope
 
-The project stays focused on digital logic simulation. The C++ engine remains the authoritative simulation layer, and gate evaluation is never reimplemented in JavaScript. Features such as user authentication, databases, payments, chat, AI/LLM features and cloud infrastructure are intentionally out of scope.
+This project focuses on digital logic circuit editing, validation, simulation, generated truth tables, and local SQLite persistence. The C++ engine remains the authoritative simulation layer; gate evaluation is not reimplemented in JavaScript. Authentication, cloud infrastructure, payments, chat, and AI/LLM features are outside the project scope.
 
 ## Authors
 

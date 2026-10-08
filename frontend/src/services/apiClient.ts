@@ -5,6 +5,7 @@ import type {
   SimulationResponse,
   TruthTableResponse,
   ValidationResponse,
+  SavedCircuitResponse, SavedCircuitsResponse, OpenCircuitResponse,
 } from '../types/api'
 
 export class ApiRequestError extends Error {
@@ -68,4 +69,9 @@ export const apiClient = {
     postCircuit<SimulationResponse>('/api/simulate', circuit),
   truthTable: (circuit: CircuitRequest) =>
     postCircuit<TruthTableResponse>('/api/truth-table', circuit),
+  listCircuits: () => request<SavedCircuitsResponse>('/api/circuits'),
+  openCircuit: (id: number) => request<OpenCircuitResponse>(`/api/circuits/${id}`),
+  saveCircuit: (name: string, circuit: CircuitRequest, id?: number) => request<SavedCircuitResponse>(id ? `/api/circuits/${id}` : '/api/circuits', {
+    method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, circuit }),
+  }),
 }

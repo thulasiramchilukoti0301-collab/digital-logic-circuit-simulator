@@ -52,6 +52,9 @@
 .stale-results-badge { padding: 4px 6px; border-radius: 5px; background: #fff1dd; color: #9a681e; font-size: 8px; font-weight: 750; white-space: nowrap; }
 .simulation-errors { max-width: 560px; margin: 7px 0 0 auto; color: #aa4f40; font-size: 9px; text-align: right; }
 .simulation-errors p { margin: 2px 0; }
+.circuit-persistence-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.circuit-persistence-controls button, .circuit-persistence-controls select { border: 1px solid #d5ddd8; border-radius: 6px; background: #fff; padding: 6px 9px; color: #28372f; font: inherit; font-size: 11px; }
+.circuit-persistence-controls [role="status"] { color: #66746c; font-size: 10px; }
 
 .editor-grid {
   min-height: 510px;

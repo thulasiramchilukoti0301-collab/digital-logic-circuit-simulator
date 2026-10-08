@@ -57,6 +57,12 @@ export interface HealthResponse {
   service: string
 }
 
+export interface SavedCircuitSummary { id: number; name: string; updatedAt: string }
+export interface SavedCircuit extends SavedCircuitSummary, CircuitRequest {}
+export interface SavedCircuitResponse { success: true; circuit: SavedCircuitSummary }
+export interface SavedCircuitsResponse { success: true; circuits: SavedCircuitSummary[] }
+export interface OpenCircuitResponse { success: true; circuit: SavedCircuit }
+
 export interface ValidationResponse {
   success: true
 }
