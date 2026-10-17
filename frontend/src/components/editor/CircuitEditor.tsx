@@ -176,6 +176,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
   const [simulationState, setSimulationState] = useState<SimulationUiState>(createInitialSimulationState)
   const circuitRevision = useRef(0)
   const requestInFlight = useRef(false)
+  const requestSequence = useRef(0)
   const nextIdCounter = useRef(1n)
   const [savedId, setSavedId] = useState<number | null>(null)
   const [documentName, setDocumentName] = useState('New circuit')
@@ -188,6 +189,25 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
   const dirty = JSON.stringify(requestSnapshot) !== savedBaseline
   useEffect(() => { void apiClient.listCircuits().then((result) => setSavedCircuits(result.circuits)).catch(() => setPersistenceStatus('Could not load saved circuits.')) }, [])
   const canvasWidth = typeof window === 'undefined' ? 500 : window.innerWidth - 470
+
+  const updateRequestState = (requestId: number, update: (current: SimulationUiState) => SimulationUiState) => {
+    setSimulationState((current) => requestSequence.current === requestId ? update(current) : current)
+  }
+
+  const discardObsoleteRequest = (requestId: number, action: Exclude<SimulationAction, null>) => {
+    updateRequestState(requestId, (current) => ({
+      ...current,
+      phase: 'error',
+      action,
+      errorKind: action === 'validate' ? 'validation' : 'simulation',
+      errors: [`The circuit changed during ${action}. The old response was discarded; run ${action} again.`],
+      outputs: action === 'simulate' ? {} : current.outputs,
+    }))
+  }
+
+  const finishRequest = (requestId: number) => {
+    if (requestSequence.current === requestId) requestInFlight.current = false
+  }
 
   const addComponent = (type: PaletteType) => {
     const id = nextAvailableId(editorState.components, nextIdCounter)
@@ -294,9 +314,10 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
     })
   }
 
-  const showBackendUnavailable = (action: Exclude<SimulationAction, null>, clearOutputs: boolean) => {
+  const showBackendUnavailable = (action: Exclude<SimulationAction, null>, clearOutputs: boolean, requestId?: number) => {
+    if (requestId !== undefined && requestSequence.current !== requestId) return
     onBackendUnavailable()
-    setSimulationState((current) => ({
+    const update = (current: SimulationUiState): SimulationUiState => ({
       ...current,
       phase: 'error',
       action,
@@ -304,15 +325,18 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
       errors: ['The C++ backend is unavailable. Start the server and retry the action.'],
       outputs: clearOutputs ? {} : current.outputs,
       stale: clearOutputs ? false : current.stale,
-    }))
+    })
+    if (requestId === undefined) setSimulationState(update)
+    else updateRequestState(requestId, update)
   }
 
-  const reportRequestFailure = (error: unknown, action: Exclude<SimulationAction, null>, kind: Exclude<SimulationErrorKind, null>, clearOutputs: boolean) => {
+  const reportRequestFailure = (error: unknown, action: Exclude<SimulationAction, null>, kind: Exclude<SimulationErrorKind, null>, clearOutputs: boolean, requestId?: number) => {
+    if (requestId !== undefined && requestSequence.current !== requestId) return
     if (error instanceof ApiRequestError && error.status === 0) {
-      showBackendUnavailable(action, clearOutputs)
+      showBackendUnavailable(action, clearOutputs, requestId)
       return
     }
-    setSimulationState((current) => ({
+    const update = (current: SimulationUiState): SimulationUiState => ({
       ...current,
       phase: 'error',
       action,
@@ -320,7 +344,9 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
       errors: getRequestErrors(error),
       outputs: clearOutputs ? {} : current.outputs,
       stale: clearOutputs ? false : current.stale,
-    }))
+    })
+    if (requestId === undefined) setSimulationState(update)
+    else updateRequestState(requestId, update)
   }
 
   const validateCircuit = async () => {
@@ -330,6 +356,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
       return
     }
     requestInFlight.current = true
+    const requestId = ++requestSequence.current
     const requestRevision = circuitRevision.current
     const request = editorStateToCircuitRequest(editorState)
     setSimulationState((current) => ({
@@ -343,16 +370,10 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
     try {
       await apiClient.validate(request)
       if (requestRevision !== circuitRevision.current) {
-        setSimulationState((current) => ({
-          ...current,
-          phase: 'error',
-          action: 'validate',
-          errorKind: 'validation',
-          errors: ['The circuit changed during validation. Validate again to check the current circuit.'],
-        }))
+        discardObsoleteRequest(requestId, 'validate')
         return
       }
-      setSimulationState((current) => ({
+      updateRequestState(requestId, (current) => ({
         ...current,
         phase: 'success',
         action: 'validate',
@@ -360,10 +381,10 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
         errors: [],
       }))
     } catch (error) {
-      if (requestRevision !== circuitRevision.current) return
-      reportRequestFailure(error, 'validate', 'validation', false)
+      if (requestRevision !== circuitRevision.current) discardObsoleteRequest(requestId, 'validate')
+      else reportRequestFailure(error, 'validate', 'validation', false, requestId)
     } finally {
-      requestInFlight.current = false
+      finishRequest(requestId)
     }
   }
 
@@ -374,13 +395,14 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
       return
     }
     requestInFlight.current = true
+    const requestId = ++requestSequence.current
     const requestRevision = circuitRevision.current
     const request = editorStateToCircuitRequest(editorState)
     const expectedOutputIds = new Set(
       request.components.filter((component) => component.type === 'output').map((component) => component.id),
     )
     let stage: 'validation' | 'simulation' = 'validation'
-    setSimulationState((current) => ({
+    updateRequestState(requestId, (current) => ({
       ...current,
       phase: 'validating',
       action: 'simulate',
@@ -393,27 +415,22 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
     try {
       await apiClient.validate(request)
       if (requestRevision !== circuitRevision.current) {
-        setSimulationState((current) => ({
-          ...current,
-          phase: 'error',
-          action: 'simulate',
-          errorKind: 'validation',
-          errors: ['The circuit changed during validation. Simulate again to evaluate the current circuit.'],
-          outputs: {},
-          stale: false,
-        }))
+        discardObsoleteRequest(requestId, 'simulate')
         return
       }
 
       stage = 'simulation'
-      setSimulationState((current) => ({ ...current, phase: 'simulating' }))
+      updateRequestState(requestId, (current) => ({ ...current, phase: 'simulating' }))
       const result = await apiClient.simulate(request)
-      if (requestRevision !== circuitRevision.current) return
+      if (requestRevision !== circuitRevision.current) {
+        discardObsoleteRequest(requestId, 'simulate')
+        return
+      }
       const outputs: Record<string, BinaryValue> = {}
       for (const output of result.outputs) {
         if (expectedOutputIds.has(output.id)) outputs[output.id] = output.value
       }
-      setSimulationState((current) => ({
+      updateRequestState(requestId, (current) => ({
         ...current,
         phase: 'success',
         action: 'simulate',
@@ -423,11 +440,13 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
         stale: requestRevision !== circuitRevision.current,
       }))
     } catch (error) {
-      if (requestRevision !== circuitRevision.current) return
-      const errorKind = error instanceof ApiRequestError && error.status === 0 ? 'backend' : stage
-      reportRequestFailure(error, 'simulate', errorKind, true)
+      if (requestRevision !== circuitRevision.current) discardObsoleteRequest(requestId, 'simulate')
+      else {
+        const errorKind = error instanceof ApiRequestError && error.status === 0 ? 'backend' : stage
+        reportRequestFailure(error, 'simulate', errorKind, true, requestId)
+      }
     } finally {
-      requestInFlight.current = false
+      finishRequest(requestId)
     }
   }
 

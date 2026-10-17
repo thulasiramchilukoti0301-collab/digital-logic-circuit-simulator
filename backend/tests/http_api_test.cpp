@@ -113,6 +113,23 @@ void test_persistence_api(ApiServer& api) {
     auto invalid=client.Post("/api/circuits",Json{{"name","Bad"},{"circuit",bad}}.dump(),"application/json");expect(invalid&&invalid->status==400,"invalid wire reference is rejected");
     auto update=client.Put("/api/circuits/"+std::to_string(id),Json{{"name","Updated"},{"circuit",unfinished}}.dump(),"application/json");expect(update&&update->status==200,"explicit update succeeds");
     auto missing=client.Put("/api/circuits/999999",Json{{"name","Missing"},{"circuit",unfinished}}.dump(),"application/json");expect(missing&&missing->status==404,"update missing ID returns not found");
+
+    const auto malformed_get = client.Get("/api/circuits/not-an-id");
+    expect_failure_shape(malformed_get, 400, "GET with a nonnumeric saved-circuit ID");
+    const auto negative_get = client.Get("/api/circuits/-1");
+    expect_failure_shape(negative_get, 400, "GET with a negative saved-circuit ID");
+    const std::string oversized_id(80, '9');
+    const auto oversized_get = client.Get("/api/circuits/" + oversized_id);
+    expect_failure_shape(oversized_get, 400, "GET with an overflowing saved-circuit ID");
+    const auto malformed_put = client.Put("/api/circuits/not-an-id",
+        Json{{"name", "Invalid ID"}, {"circuit", unfinished}}.dump(), "application/json");
+    expect_failure_shape(malformed_put, 400, "PUT with a nonnumeric saved-circuit ID");
+    const auto negative_put = client.Put("/api/circuits/-1",
+        Json{{"name", "Negative ID"}, {"circuit", unfinished}}.dump(), "application/json");
+    expect_failure_shape(negative_put, 400, "PUT with a negative saved-circuit ID");
+    const auto oversized_put = client.Put("/api/circuits/" + oversized_id,
+        Json{{"name", "Overflow ID"}, {"circuit", unfinished}}.dump(), "application/json");
+    expect_failure_shape(oversized_put, 400, "PUT with an overflowing saved-circuit ID");
 }
 
 void test_health_unchanged(ApiServer& api) {

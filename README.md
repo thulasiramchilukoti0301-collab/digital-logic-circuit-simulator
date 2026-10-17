@@ -112,14 +112,16 @@ The editor sends validation and simulation requests through the Vite `/api` prox
 
 ## Persistence API and Database
 
+See [Decision 001: SQLite circuit persistence](docs/decisions/001-sqlite-circuit-persistence.md) for the rationale and scope.
+
 - `GET /api/circuits` lists saved circuit summaries with `id`, `name`, and `updatedAt`.
 - `POST /api/circuits` creates a saved circuit from `{ "name": "...", "circuit": { "version": 1, "components": [], "wires": [] } }`. Duplicate names return HTTP 409.
 - `GET /api/circuits/{id}` returns the saved circuit and its component/wire document.
 - `PUT /api/circuits/{id}` replaces the explicitly selected circuit atomically. A missing ID returns HTTP 404.
 
-The database has `circuits`, `components`, and `wires` tables. Components and wires reference their parent circuit; wire endpoints reference components. Updates remove existing wires before components and replace the contents in one transaction. The database is accessed through CMake's `SQLite3::SQLite3` imported target and remains separate from the simulation engine.
+The database has `circuits`, `components`, and `wires` tables. Components and wires reference their parent circuit; wire endpoints reference components. Updates remove existing wires before components and replace the contents in one transaction. CMake selects the SQLite imported target provided by `FindSQLite3` (`SQLite::SQLite3` on CMake 3.15 and `SQLite3::SQLite3` on newer releases), so the declared minimum remains supported. The database remains separate from the simulation engine.
 
-The database defaults to `data/circuits.sqlite3`. Set `DIGITAL_LOGIC_DB_PATH` to select another database file; the server creates parent directories as needed. Runtime database files and SQLite journal, WAL, and SHM sidecars are ignored by Git.
+The database defaults to `data/circuits.sqlite3`. Set `DIGITAL_LOGIC_DB_PATH` to select another database file; the server creates parent directories as needed. Runtime database files and SQLite journal, WAL, and SHM sidecars in `data/` are ignored by Git. A custom database path must stay outside tracked source files, or its database and sidecar patterns must be added to `.gitignore`.
 
 ## Example Circuit
 
