@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EditorComponent, EditorState, EditorWireDraft, EditorWireTarget } from '../../types/editor'
 import { canConnectComponents, componentHasOutput, createEmptyEditorState } from '../../types/editor'
-import type { BinaryValue } from '../../types/api'
+import type { BinaryValue, SavedCircuitSummary } from '../../types/api'
 import { ApiRequestError, apiClient } from '../../services/apiClient'
-import { editorStateToCircuitRequest } from '../../types/editor'
+import { circuitRequestToEditorState, editorStateToCircuitRequest } from '../../types/editor'
 import type { SimulationAction, SimulationErrorKind, SimulationUiState } from '../../types/simulation'
 import { createInitialSimulationState } from '../../types/simulation'
 import ComponentInspector from './ComponentInspector'
@@ -55,6 +55,7 @@ function ComponentPalette({ onAdd }: { onAdd: (type: PaletteType) => void }) {
 
 function CircuitCanvas({
   state,
+  componentKey,
   wireDraft,
   onSelect,
   onMove,
@@ -66,6 +67,7 @@ function CircuitCanvas({
   simulationStale,
 }: {
   state: EditorState
+  componentKey: number
   wireDraft: EditorWireDraft | null
   onSelect: (id: string) => void
   onMove: (id: string, x: number, y: number) => void
@@ -76,7 +78,9 @@ function CircuitCanvas({
   simulationOutputs: Record<string, BinaryValue>
   simulationStale: boolean
 }) {
-  const canvasRef = useRef<HTMLDivElement>(null)
+  // A ref assignment does not schedule a render. Keep the mounted canvas in
+  // state so WireLayer receives real dimensions immediately after mount/open.
+  const [canvasElement, setCanvasElement] = useState<HTMLDivElement | null>(null)
 
   return (
     <section className="canvas-panel" aria-labelledby="canvas-title">
@@ -90,12 +94,12 @@ function CircuitCanvas({
           <span>{state.wires.length} wires</span>
         </div>
       </div>
-      <div className="circuit-canvas" ref={canvasRef} role="region" aria-label="Circuit workspace">
+      <div className="circuit-canvas" ref={setCanvasElement} role="region" aria-label="Circuit workspace">
         <WireLayer
           components={state.components}
           wires={state.wires}
           draft={wireDraft}
-          canvas={canvasRef.current}
+          canvas={canvasElement}
         />
         {state.components.length === 0 ? (
           <div className="canvas-empty-state">
@@ -106,10 +110,10 @@ function CircuitCanvas({
           </div>
         ) : state.components.map((component) => (
           <ComponentNode
-            key={component.id}
+            key={`${componentKey}-${component.id}`}
             component={component}
             selected={state.selectedComponentId === component.id}
-            canvas={canvasRef.current}
+            canvas={canvasElement}
             wireDraft={wireDraft}
             onSelect={onSelect}
             onMove={onMove}
@@ -172,8 +176,38 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
   const [simulationState, setSimulationState] = useState<SimulationUiState>(createInitialSimulationState)
   const circuitRevision = useRef(0)
   const requestInFlight = useRef(false)
+  const requestSequence = useRef(0)
   const nextIdCounter = useRef(1n)
+  const [savedId, setSavedId] = useState<number | null>(null)
+  const [documentName, setDocumentName] = useState('New circuit')
+  const [savedBaseline, setSavedBaseline] = useState('')
+  const [savedCircuits, setSavedCircuits] = useState<SavedCircuitSummary[]>([])
+  const [persistenceStatus, setPersistenceStatus] = useState('')
+  const [circuitViewKey, setCircuitViewKey] = useState(0)
+  const persistenceBusy = useRef(false)
+  const requestSnapshot = editorStateToCircuitRequest(editorState)
+  const dirty = JSON.stringify(requestSnapshot) !== savedBaseline
+  useEffect(() => { void apiClient.listCircuits().then((result) => setSavedCircuits(result.circuits)).catch(() => setPersistenceStatus('Could not load saved circuits.')) }, [])
   const canvasWidth = typeof window === 'undefined' ? 500 : window.innerWidth - 470
+
+  const updateRequestState = (requestId: number, update: (current: SimulationUiState) => SimulationUiState) => {
+    setSimulationState((current) => requestSequence.current === requestId ? update(current) : current)
+  }
+
+  const discardObsoleteRequest = (requestId: number, action: Exclude<SimulationAction, null>) => {
+    updateRequestState(requestId, (current) => ({
+      ...current,
+      phase: 'error',
+      action,
+      errorKind: action === 'validate' ? 'validation' : 'simulation',
+      errors: [`The circuit changed during ${action}. The old response was discarded; run ${action} again.`],
+      outputs: action === 'simulate' ? {} : current.outputs,
+    }))
+  }
+
+  const finishRequest = (requestId: number) => {
+    if (requestSequence.current === requestId) requestInFlight.current = false
+  }
 
   const addComponent = (type: PaletteType) => {
     const id = nextAvailableId(editorState.components, nextIdCounter)
@@ -280,9 +314,10 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
     })
   }
 
-  const showBackendUnavailable = (action: Exclude<SimulationAction, null>, clearOutputs: boolean) => {
+  const showBackendUnavailable = (action: Exclude<SimulationAction, null>, clearOutputs: boolean, requestId?: number) => {
+    if (requestId !== undefined && requestSequence.current !== requestId) return
     onBackendUnavailable()
-    setSimulationState((current) => ({
+    const update = (current: SimulationUiState): SimulationUiState => ({
       ...current,
       phase: 'error',
       action,
@@ -290,15 +325,18 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
       errors: ['The C++ backend is unavailable. Start the server and retry the action.'],
       outputs: clearOutputs ? {} : current.outputs,
       stale: clearOutputs ? false : current.stale,
-    }))
+    })
+    if (requestId === undefined) setSimulationState(update)
+    else updateRequestState(requestId, update)
   }
 
-  const reportRequestFailure = (error: unknown, action: Exclude<SimulationAction, null>, kind: Exclude<SimulationErrorKind, null>, clearOutputs: boolean) => {
+  const reportRequestFailure = (error: unknown, action: Exclude<SimulationAction, null>, kind: Exclude<SimulationErrorKind, null>, clearOutputs: boolean, requestId?: number) => {
+    if (requestId !== undefined && requestSequence.current !== requestId) return
     if (error instanceof ApiRequestError && error.status === 0) {
-      showBackendUnavailable(action, clearOutputs)
+      showBackendUnavailable(action, clearOutputs, requestId)
       return
     }
-    setSimulationState((current) => ({
+    const update = (current: SimulationUiState): SimulationUiState => ({
       ...current,
       phase: 'error',
       action,
@@ -306,16 +344,19 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
       errors: getRequestErrors(error),
       outputs: clearOutputs ? {} : current.outputs,
       stale: clearOutputs ? false : current.stale,
-    }))
+    })
+    if (requestId === undefined) setSimulationState(update)
+    else updateRequestState(requestId, update)
   }
 
   const validateCircuit = async () => {
-    if (requestInFlight.current) return
+    if (requestInFlight.current || persistenceBusy.current) return
     if (backendState === 'unavailable') {
       showBackendUnavailable('validate', false)
       return
     }
     requestInFlight.current = true
+    const requestId = ++requestSequence.current
     const requestRevision = circuitRevision.current
     const request = editorStateToCircuitRequest(editorState)
     setSimulationState((current) => ({
@@ -329,16 +370,10 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
     try {
       await apiClient.validate(request)
       if (requestRevision !== circuitRevision.current) {
-        setSimulationState((current) => ({
-          ...current,
-          phase: 'error',
-          action: 'validate',
-          errorKind: 'validation',
-          errors: ['The circuit changed during validation. Validate again to check the current circuit.'],
-        }))
+        discardObsoleteRequest(requestId, 'validate')
         return
       }
-      setSimulationState((current) => ({
+      updateRequestState(requestId, (current) => ({
         ...current,
         phase: 'success',
         action: 'validate',
@@ -346,26 +381,28 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
         errors: [],
       }))
     } catch (error) {
-      reportRequestFailure(error, 'validate', 'validation', false)
+      if (requestRevision !== circuitRevision.current) discardObsoleteRequest(requestId, 'validate')
+      else reportRequestFailure(error, 'validate', 'validation', false, requestId)
     } finally {
-      requestInFlight.current = false
+      finishRequest(requestId)
     }
   }
 
   const simulateCircuit = async () => {
-    if (requestInFlight.current) return
+    if (requestInFlight.current || persistenceBusy.current) return
     if (backendState === 'unavailable') {
       showBackendUnavailable('simulate', true)
       return
     }
     requestInFlight.current = true
+    const requestId = ++requestSequence.current
     const requestRevision = circuitRevision.current
     const request = editorStateToCircuitRequest(editorState)
     const expectedOutputIds = new Set(
       request.components.filter((component) => component.type === 'output').map((component) => component.id),
     )
     let stage: 'validation' | 'simulation' = 'validation'
-    setSimulationState((current) => ({
+    updateRequestState(requestId, (current) => ({
       ...current,
       phase: 'validating',
       action: 'simulate',
@@ -378,26 +415,22 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
     try {
       await apiClient.validate(request)
       if (requestRevision !== circuitRevision.current) {
-        setSimulationState((current) => ({
-          ...current,
-          phase: 'error',
-          action: 'simulate',
-          errorKind: 'validation',
-          errors: ['The circuit changed during validation. Simulate again to evaluate the current circuit.'],
-          outputs: {},
-          stale: false,
-        }))
+        discardObsoleteRequest(requestId, 'simulate')
         return
       }
 
       stage = 'simulation'
-      setSimulationState((current) => ({ ...current, phase: 'simulating' }))
+      updateRequestState(requestId, (current) => ({ ...current, phase: 'simulating' }))
       const result = await apiClient.simulate(request)
+      if (requestRevision !== circuitRevision.current) {
+        discardObsoleteRequest(requestId, 'simulate')
+        return
+      }
       const outputs: Record<string, BinaryValue> = {}
       for (const output of result.outputs) {
         if (expectedOutputIds.has(output.id)) outputs[output.id] = output.value
       }
-      setSimulationState((current) => ({
+      updateRequestState(requestId, (current) => ({
         ...current,
         phase: 'success',
         action: 'simulate',
@@ -407,11 +440,50 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
         stale: requestRevision !== circuitRevision.current,
       }))
     } catch (error) {
-      const errorKind = error instanceof ApiRequestError && error.status === 0 ? 'backend' : stage
-      reportRequestFailure(error, 'simulate', errorKind, true)
+      if (requestRevision !== circuitRevision.current) discardObsoleteRequest(requestId, 'simulate')
+      else {
+        const errorKind = error instanceof ApiRequestError && error.status === 0 ? 'backend' : stage
+        reportRequestFailure(error, 'simulate', errorKind, true, requestId)
+      }
     } finally {
-      requestInFlight.current = false
+      finishRequest(requestId)
     }
+  }
+
+  const saveCircuit = async () => {
+    if (persistenceBusy.current || requestInFlight.current) return
+    const name = savedId === null ? window.prompt('Name this circuit:') : documentName
+    if (!name?.trim()) return
+    const snapshot = editorStateToCircuitRequest(editorState)
+    const revision = circuitRevision.current
+    persistenceBusy.current = true; setPersistenceStatus('Saving…')
+    try {
+      const result = await apiClient.saveCircuit(name.trim(), snapshot, savedId ?? undefined)
+      setSavedId(result.circuit.id); setDocumentName(result.circuit.name); setSavedBaseline(JSON.stringify(snapshot))
+      setSavedCircuits((current) => [result.circuit, ...current.filter((entry) => entry.id !== result.circuit.id)])
+      setPersistenceStatus(revision === circuitRevision.current ? 'Saved.' : 'Saved snapshot; newer edits are unsaved.')
+    } catch (error) { setPersistenceStatus(getRequestErrors(error).join(' ')) }
+    finally { persistenceBusy.current = false }
+  }
+  const openCircuit = async (id: number) => {
+    if (persistenceBusy.current || requestInFlight.current) return
+    if (dirty && !window.confirm('Discard unsaved circuit changes and open the selected circuit?')) return
+    const revision = circuitRevision.current
+    persistenceBusy.current = true; setPersistenceStatus('Opening…')
+    try {
+      const result = await apiClient.openCircuit(id)
+      if (revision !== circuitRevision.current) { setPersistenceStatus('The editor changed while opening. Open again to replace the current changes.'); return }
+      const doc = { version: result.circuit.version, components: result.circuit.components, wires: result.circuit.wires }
+      const restored = circuitRequestToEditorState(doc)
+      setEditorState(restored); setWireDraft(null); setSimulationState(createInitialSimulationState())
+      setCircuitViewKey((key) => key + 1)
+      circuitRevision.current += 1
+      nextIdCounter.current = restored.components.reduce((next, component) => { const n = /^\d+$/.test(component.id) ? BigInt(component.id) + 1n : 1n; return n > next ? n : next }, 1n)
+      // Baseline and dirty-state comparison use the same editor-to-request
+      // normalization, avoiding false changes from JSON property ordering.
+      setSavedId(id); setDocumentName(result.circuit.name); setSavedBaseline(JSON.stringify(editorStateToCircuitRequest(restored))); setPersistenceStatus('Opened.')
+    } catch (error) { setPersistenceStatus(getRequestErrors(error).join(' ')) }
+    finally { persistenceBusy.current = false }
   }
 
   const selectedComponent = editorState.components.find(
@@ -423,8 +495,15 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
       <div className="editor-actions">
         <div className="editor-document-title">
           <span className="document-icon" aria-hidden="true">C</span>
-          <span>New circuit</span>
-          <span className="unsaved-indicator">UNSAVED</span>
+          <span>{documentName}</span>
+          {dirty && <span className="unsaved-indicator">UNSAVED</span>}
+        </div>
+        <div className="circuit-persistence-controls">
+          <button type="button" onClick={() => void saveCircuit()} disabled={persistenceBusy.current}>{savedId === null ? 'Save as…' : 'Save'}</button>
+          <select aria-label="Open saved circuit" value="" disabled={persistenceBusy.current} onChange={(event) => { if (event.target.value) void openCircuit(Number(event.target.value)) }}>
+            <option value="">Open saved…</option>{savedCircuits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+          <span role="status" aria-live="polite">{persistenceStatus}</span>
         </div>
         <div className="editor-action-status">
           <span className="engine-status-dot" />
@@ -436,6 +515,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
         <ComponentPalette onAdd={addComponent} />
         <CircuitCanvas
           state={editorState}
+          componentKey={circuitViewKey}
           wireDraft={wireDraft}
           onSelect={selectComponent}
           onMove={moveComponent}

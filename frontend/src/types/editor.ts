@@ -127,3 +127,16 @@ export function editorStateToCircuitRequest(state: EditorState): CircuitRequest 
     })),
   }
 }
+
+export function circuitRequestToEditorState(request: CircuitRequest): EditorState {
+  return {
+    components: request.components.map((component) => {
+      const position = component.position ?? { x: 12, y: 12 }
+      if (component.type === 'input') return { ...component, position }
+      if (component.type === 'output') return { ...component, name: component.name ?? 'Output', position }
+      return { ...component, name: component.name ?? component.type.toUpperCase(), position }
+    }),
+    wires: request.wires.map((wire) => ({ ...wire })),
+    selectedComponentId: null,
+  }
+}

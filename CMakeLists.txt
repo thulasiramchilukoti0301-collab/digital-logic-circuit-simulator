@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.15)
 
 project(DigitalLogicEngine LANGUAGES CXX)
 
+find_package(SQLite3 REQUIRED)
+if(TARGET SQLite3::SQLite3)
+    set(DIGITAL_LOGIC_SQLITE_TARGET SQLite3::SQLite3)
+elseif(TARGET SQLite::SQLite3)
+    set(DIGITAL_LOGIC_SQLITE_TARGET SQLite::SQLite3)
+else()
+    message(FATAL_ERROR "FindSQLite3 did not provide a supported imported target")
+endif()
+
 include(CTest)
 
 add_library(digital_logic_engine
@@ -52,6 +61,7 @@ add_executable(digital_logic_server
     backend/app/main.cpp
     backend/app/CircuitRequest.cpp
     backend/app/ApiRoutes.cpp
+    backend/app/CircuitRepository.cpp
 )
 target_include_directories(digital_logic_server PRIVATE backend/app)
 target_link_libraries(digital_logic_server
@@ -59,6 +69,7 @@ target_link_libraries(digital_logic_server
         digital_logic_engine
         cpp_httplib
         nlohmann_json
+        ${DIGITAL_LOGIC_SQLITE_TARGET}
 )
 
 if(BUILD_TESTING)
@@ -81,13 +92,19 @@ if(BUILD_TESTING)
     add_executable(digital_logic_http_api_test
         backend/app/CircuitRequest.cpp
         backend/app/ApiRoutes.cpp
+        backend/app/CircuitRepository.cpp
         backend/tests/http_api_test.cpp
     )
     target_include_directories(digital_logic_http_api_test PRIVATE backend/app)
     target_link_libraries(digital_logic_http_api_test
-        PRIVATE digital_logic_engine cpp_httplib nlohmann_json
+        PRIVATE digital_logic_engine cpp_httplib nlohmann_json ${DIGITAL_LOGIC_SQLITE_TARGET}
     )
     add_test(NAME digital_logic_http_api_test COMMAND digital_logic_http_api_test)
+
+    add_executable(digital_logic_repository_test backend/app/CircuitRepository.cpp backend/tests/circuit_repository_test.cpp)
+    target_include_directories(digital_logic_repository_test PRIVATE backend/app)
+    target_link_libraries(digital_logic_repository_test PRIVATE nlohmann_json ${DIGITAL_LOGIC_SQLITE_TARGET})
+    add_test(NAME digital_logic_repository_test COMMAND digital_logic_repository_test)
 
     add_executable(digital_logic_smoke backend/tests/smoke.cpp)
     target_link_libraries(digital_logic_smoke PRIVATE digital_logic_engine)

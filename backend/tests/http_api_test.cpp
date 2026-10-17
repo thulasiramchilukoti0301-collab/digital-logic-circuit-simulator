@@ -7,6 +7,8 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <filesystem>
+#include <cstdlib>
 
 namespace {
 
@@ -97,6 +99,37 @@ void expect_failure_shape(const httplib::Result& response, int status,
     } catch (const std::exception& error) {
         expect(false, label + " response is valid JSON: " + error.what());
     }
+}
+
+void test_persistence_api(ApiServer& api) {
+    auto client=api.client();
+    Json unfinished={{"version",1},{"components",Json::array({{{"id","31"},{"type","and"},{"name","Open AND"},{"inputCount",2},{"position",{{"x",3.5},{"y",8}}}}})},{"wires",Json::array()}};
+    auto created=client.Post("/api/circuits",Json{{"name","Unfinished"},{"circuit",unfinished}}.dump(),"application/json");
+    expect(created&&created->status==201,"unfinished circuit can be saved"); if(!created)return;
+    auto body=Json::parse(created->body);auto id=body["circuit"]["id"].get<long long>();
+    auto opened=client.Get("/api/circuits/"+std::to_string(id));expect(opened&&opened->status==200,"saved circuit can be opened");if(opened)expect(Json::parse(opened->body)["circuit"]["components"]==unfinished["components"],"open restores component data");
+    auto duplicate=client.Post("/api/circuits",Json{{"name","Unfinished"},{"circuit",unfinished}}.dump(),"application/json");expect(duplicate&&duplicate->status==409,"duplicate name returns conflict");
+    auto bad=unfinished;bad["wires"].push_back({{"sourceId","missing"},{"destinationId","31"},{"destinationPin",0}});
+    auto invalid=client.Post("/api/circuits",Json{{"name","Bad"},{"circuit",bad}}.dump(),"application/json");expect(invalid&&invalid->status==400,"invalid wire reference is rejected");
+    auto update=client.Put("/api/circuits/"+std::to_string(id),Json{{"name","Updated"},{"circuit",unfinished}}.dump(),"application/json");expect(update&&update->status==200,"explicit update succeeds");
+    auto missing=client.Put("/api/circuits/999999",Json{{"name","Missing"},{"circuit",unfinished}}.dump(),"application/json");expect(missing&&missing->status==404,"update missing ID returns not found");
+
+    const auto malformed_get = client.Get("/api/circuits/not-an-id");
+    expect_failure_shape(malformed_get, 400, "GET with a nonnumeric saved-circuit ID");
+    const auto negative_get = client.Get("/api/circuits/-1");
+    expect_failure_shape(negative_get, 400, "GET with a negative saved-circuit ID");
+    const std::string oversized_id(80, '9');
+    const auto oversized_get = client.Get("/api/circuits/" + oversized_id);
+    expect_failure_shape(oversized_get, 400, "GET with an overflowing saved-circuit ID");
+    const auto malformed_put = client.Put("/api/circuits/not-an-id",
+        Json{{"name", "Invalid ID"}, {"circuit", unfinished}}.dump(), "application/json");
+    expect_failure_shape(malformed_put, 400, "PUT with a nonnumeric saved-circuit ID");
+    const auto negative_put = client.Put("/api/circuits/-1",
+        Json{{"name", "Negative ID"}, {"circuit", unfinished}}.dump(), "application/json");
+    expect_failure_shape(negative_put, 400, "PUT with a negative saved-circuit ID");
+    const auto oversized_put = client.Put("/api/circuits/" + oversized_id,
+        Json{{"name", "Overflow ID"}, {"circuit", unfinished}}.dump(), "application/json");
+    expect_failure_shape(oversized_put, 400, "PUT with an overflowing saved-circuit ID");
 }
 
 void test_health_unchanged(ApiServer& api) {
@@ -293,7 +326,15 @@ void test_validation_endpoint(ApiServer& api) {
 
 int main() {
     try {
+        const auto db=(std::filesystem::temp_directory_path()/"dls_http_test.sqlite3").string();
+        std::filesystem::remove(db);
+#ifdef _WIN32
+        _putenv_s("DIGITAL_LOGIC_DB_PATH",db.c_str());
+#else
+        setenv("DIGITAL_LOGIC_DB_PATH",db.c_str(),1);
+#endif
         ApiServer api;
+        test_persistence_api(api);
         test_health_unchanged(api);
         test_successful_simulation(api);
         test_request_errors(api);
