@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { EditorComponent, EditorState, EditorWireDraft, EditorWireTarget } from '../../types/editor'
 import { canConnectComponents, componentHasOutput, createEmptyEditorState } from '../../types/editor'
 import type { BinaryValue, SavedCircuitSummary } from '../../types/api'
@@ -57,7 +58,10 @@ function CircuitCanvas({
   state,
   componentKey,
   wireDraft,
+  selectedWireIndex,
   onSelect,
+  onSelectWire,
+  onDeleteWire,
   onMove,
   onWireStart,
   onWireMove,
@@ -69,7 +73,10 @@ function CircuitCanvas({
   state: EditorState
   componentKey: number
   wireDraft: EditorWireDraft | null
+  selectedWireIndex: number | null
   onSelect: (id: string) => void
+  onSelectWire: (index: number) => void
+  onDeleteWire: () => void
   onMove: (id: string, x: number, y: number) => void
   onWireStart: (sourceId: string) => void
   onWireMove: (sourceId: string, x: number, y: number, target: EditorWireTarget | null) => void
@@ -100,6 +107,9 @@ function CircuitCanvas({
           wires={state.wires}
           draft={wireDraft}
           canvas={canvasElement}
+          selectedWireIndex={selectedWireIndex}
+          onSelectWire={onSelectWire}
+          onDeleteWire={onDeleteWire}
         />
         {state.components.length === 0 ? (
           <div className="canvas-empty-state">
@@ -174,6 +184,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
   const [editorState, setEditorState] = useState(createEmptyEditorState)
   const [wireDraft, setWireDraft] = useState<EditorWireDraft | null>(null)
   const [simulationState, setSimulationState] = useState<SimulationUiState>(createInitialSimulationState)
+  const [selectedWireIndex, setSelectedWireIndex] = useState<number | null>(null)
   const circuitRevision = useRef(0)
   const requestInFlight = useRef(false)
   const requestSequence = useRef(0)
@@ -213,6 +224,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
     const id = nextAvailableId(editorState.components, nextIdCounter)
     const component = createComponent(type, id, editorState.components, editorState.components.length, Math.max(180, canvasWidth))
     markCircuitChanged()
+    setSelectedWireIndex(null)
     setEditorState((current) => ({
       ...current,
       components: [...current.components, component],
@@ -221,7 +233,14 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
   }
 
   const selectComponent = (id: string) => {
+    setSelectedWireIndex(null)
     setEditorState((current) => ({ ...current, selectedComponentId: id }))
+  }
+
+  const selectWire = (index: number) => {
+    if (!editorState.wires[index]) return
+    setSelectedWireIndex(index)
+    setEditorState((current) => ({ ...current, selectedComponentId: null }))
   }
 
   const moveComponent = (id: string, x: number, y: number) => {
@@ -238,7 +257,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
   const startWire = (sourceId: string) => {
     const source = editorState.components.find((component) => component.id === sourceId)
     if (!source || !componentHasOutput(source)) return
-    setEditorState((current) => ({ ...current, selectedComponentId: sourceId }))
+    selectComponent(sourceId)
     setWireDraft({
       sourceId,
       pointer: getOutputConnectionPosition(source),
@@ -284,6 +303,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
 
   const updateInputValue = (inputId: string, value: 0 | 1) => {
     markCircuitChanged()
+    setSelectedWireIndex(null)
     setEditorState((current) => ({
       ...current,
       components: current.components.map((component) =>
@@ -293,6 +313,58 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
       ),
       selectedComponentId: inputId,
     }))
+  }
+
+  const deleteComponent = (componentId: string) => {
+    if (!editorState.components.some((component) => component.id === componentId)) return
+    markCircuitChanged()
+    setEditorState((current) => ({
+      ...current,
+      components: current.components.filter((component) => component.id !== componentId),
+      wires: current.wires.filter((wire) => wire.sourceId !== componentId && wire.destinationId !== componentId),
+      selectedComponentId: null,
+    }))
+    setSelectedWireIndex(null)
+    setWireDraft((draft) => draft &&
+      (draft.sourceId === componentId || draft.hoveredTarget?.destinationId === componentId)
+      ? null
+      : draft)
+  }
+
+  const deleteSelectedWire = () => {
+    if (selectedWireIndex === null || !editorState.wires[selectedWireIndex]) return
+    markCircuitChanged()
+    setEditorState((current) => ({
+      ...current,
+      wires: current.wires.filter((_, index) => index !== selectedWireIndex),
+      selectedComponentId: null,
+    }))
+    setSelectedWireIndex(null)
+  }
+
+  const deleteSelectedItem = () => {
+    if (editorState.selectedComponentId !== null) {
+      deleteComponent(editorState.selectedComponentId)
+    } else if (selectedWireIndex !== null) {
+      deleteSelectedWire()
+    }
+  }
+
+  const handleWorkspaceKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Delete' && event.key !== 'Backspace') return
+    const target = event.target
+    if (target instanceof Element) {
+      const componentBody = target.closest('.canvas-component')
+      const interactiveTarget = target.closest(
+        'button, input, textarea, select, option, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="textbox"], [role="combobox"]',
+      )
+      // A component root is a keyboard-selectable editor object even if its
+      // semantics later change to role=button. Nested controls remain protected.
+      if (interactiveTarget && interactiveTarget !== componentBody) return
+    }
+    if (editorState.selectedComponentId === null && selectedWireIndex === null) return
+    event.preventDefault()
+    deleteSelectedItem()
   }
 
   function markCircuitChanged() {
@@ -476,6 +548,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
       const doc = { version: result.circuit.version, components: result.circuit.components, wires: result.circuit.wires }
       const restored = circuitRequestToEditorState(doc)
       setEditorState(restored); setWireDraft(null); setSimulationState(createInitialSimulationState())
+      setSelectedWireIndex(null)
       setCircuitViewKey((key) => key + 1)
       circuitRevision.current += 1
       nextIdCounter.current = restored.components.reduce((next, component) => { const n = /^\d+$/.test(component.id) ? BigInt(component.id) + 1n : 1n; return n > next ? n : next }, 1n)
@@ -489,9 +562,10 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
   const selectedComponent = editorState.components.find(
     (component) => component.id === editorState.selectedComponentId,
   ) ?? null
+  const selectedWire = selectedWireIndex === null ? null : editorState.wires[selectedWireIndex] ?? null
 
   return (
-    <section className="editor-workspace" aria-label="Circuit editor">
+    <section className="editor-workspace" aria-label="Circuit editor" onKeyDown={handleWorkspaceKeyDown}>
       <div className="editor-actions">
         <div className="editor-document-title">
           <span className="document-icon" aria-hidden="true">C</span>
@@ -517,7 +591,10 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
           state={editorState}
           componentKey={circuitViewKey}
           wireDraft={wireDraft}
+          selectedWireIndex={selectedWireIndex}
           onSelect={selectComponent}
+          onSelectWire={selectWire}
+          onDeleteWire={deleteSelectedWire}
           onMove={moveComponent}
           onWireStart={startWire}
           onWireMove={moveWire}
@@ -526,7 +603,12 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
           simulationOutputs={simulationState.outputs}
           simulationStale={simulationState.stale}
         />
-        <ComponentInspector component={selectedComponent} />
+        <ComponentInspector
+          component={selectedComponent}
+          selectedWire={selectedWire}
+          onDeleteComponent={() => selectedComponent && deleteComponent(selectedComponent.id)}
+          onDeleteWire={deleteSelectedWire}
+        />
       </div>
     </section>
   )

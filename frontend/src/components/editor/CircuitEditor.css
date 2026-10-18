@@ -284,6 +284,12 @@
 .inspector-detail { padding: 9px 0; border-top: 1px solid #e9ede9; }
 .inspector-detail dt { margin-bottom: 4px; color: #8c9792; font-size: 8px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .inspector-detail dd { margin: 0; overflow-wrap: anywhere; color: #46524e; font-size: 10px; font-weight: 600; }
+.inspector-delete-button { margin-top: 14px; padding: 7px 10px; border: 1px solid #e6c7c0; border-radius: 6px; background: #fff8f6; color: #a64f40; font: inherit; font-size: 9px; font-weight: 700; cursor: pointer; }
+.inspector-delete-button:hover { border-color: #d6978a; background: #fff0ec; }
+.inspector-delete-button:focus-visible { outline: 2px solid rgba(185, 87, 67, .35); outline-offset: 2px; }
+.wire-hit-target { fill: none; stroke: transparent; stroke-width: 14px; stroke-linecap: round; cursor: pointer; }
+.wire-hit-target:focus-visible { stroke: rgba(52, 137, 99, .18); outline: none; }
+.committed-wire--selected { stroke: #c36b45; stroke-width: 3.6; }
 
 @media (max-width: 900px) {
   .editor-actions { flex-wrap: wrap; }
