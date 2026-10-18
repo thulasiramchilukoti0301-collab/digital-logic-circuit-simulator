@@ -250,7 +250,7 @@ This project focuses on digital logic circuit editing, validation, simulation, g
 - **Course:** Object-Oriented Programming with C++ (Mini Project)
 - **Branch:** Computer Science and Engineering (CSE), 2nd Year
 - **Institution:** Indian Institute of Information Technology (IIIT) Tiruchirappalli
-- **Guided by:** Dr. Anoop Jacob
+- **Guided by:** Dr. Anoop Jacob Thomas
 
 ---
 
