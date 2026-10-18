@@ -53,6 +53,9 @@ export default function ComponentNode({
     if (event.button !== 0 || !canvas || (event.target as Element).closest('.connection-point')) return
     event.preventDefault()
     onSelect(component.id)
+    // preventDefault above suppresses the browser's normal pointer focus transfer.
+    // Focus the node explicitly so workspace keyboard shortcuts work after a click.
+    event.currentTarget.focus({ preventScroll: true })
 
     const nodeBounds = event.currentTarget.getBoundingClientRect()
     dragState.current = {

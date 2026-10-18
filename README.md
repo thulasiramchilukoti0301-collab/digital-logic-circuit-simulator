@@ -38,6 +38,7 @@ The browser editor places and connects circuit components, presents component de
 
 - Add inputs, outputs, and gates by clicking items in the component palette.
 - Drag existing components to reposition them and connect component pins by drawing wires.
+- Select and delete components or individual wires. Deleting a component also removes all wires attached to it.
 - Toggle binary input values, select components, and inspect their type, ID, name, position, input count, or value. The inspector is read-only; component renaming is not currently available.
 - Validate and simulate through the C++ API. Truth-table generation is available in the backend API; a truth-table display is not yet implemented in the frontend.
 
@@ -47,7 +48,7 @@ The browser editor places and connects circuit components, presents component de
 - Restore component IDs, types, names, positions, gate input counts, input values, and wires.
 - Save unfinished circuits with unconnected pins. Persistence checks document structure and references without requiring simulation validation.
 - Confirm before replacing unsaved changes. Opening a circuit clears transient simulation results.
-- Circuit persistence is implemented and Mac browser checks are complete. It remains on `feat/circuit-persistence`; it has not yet been committed or merged.
+- SQLite persistence was merged through PR #2. The original persistence implementation was tested on macOS; the Windows build, all 10 CTest tests, and persistence browser checks have passed. The later hardening fixes have not yet been retested on macOS.
 
 ## Supported Components
 
@@ -206,16 +207,16 @@ ctest --test-dir build-ucrt64 --output-on-failure
 ./build-ucrt64/digital_logic_server.exe
 ```
 
-Start Vite in another terminal with `cd frontend`, `npm install`, and `npm run dev`. Windows build and browser testing remain pending; Windows setup instructions have not been validated on Windows.
+Start Vite in another terminal with `cd frontend`, `npm install`, and `npm run dev`. The Windows build, all 10 CTest tests, and persistence browser checks have passed.
 
 ## Current Development Status
 
 - The C++17 engine supports circuit validation, evaluation, signal propagation, and truth-table generation.
 - The C++ HTTP API exposes health, validation, simulation, truth-table, and SQLite circuit persistence endpoints.
-- The React editor supports palette-click component placement, component dragging, visual wiring, input toggles, inspection, validation, and simulation.
-- SQLite save/list/open/update is implemented, including persistence of unfinished circuits. Mac browser checks are complete.
-- Truth-table UI remains pending. Windows testing remains pending.
-- The persistence feature is on `feat/circuit-persistence` and is not yet committed or merged.
+- The React editor supports palette-click component placement, component dragging, visual wiring, component and wire selection/deletion, input toggles, inspection, validation, and simulation.
+- SQLite persistence was merged through PR #2. The original persistence implementation was tested on macOS; the later hardening fixes have not yet been retested there. The Windows build, 10/10 CTest tests, and persistence browser checks have passed.
+- Editor component and wire deletion is implemented and manually verified on Windows. These changes are not yet committed or merged.
+- Truth-table UI remains pending.
 
 ## Development Roadmap
 
@@ -226,14 +227,13 @@ Start Vite in another terminal with `cd frontend`, `npm install`, and `npm run d
 - [x] Input, Output, Wire, and Circuit classes
 - [x] Circuit validation, evaluation, signal propagation, and truth-table generation
 - [x] HTTP/JSON API for health, validation, simulation, and truth tables
-- [x] React/TypeScript visual circuit editor with component placement, dragging, wiring, input controls, inspection, validation, and simulation integration
+- [x] React/TypeScript visual circuit editor with component placement, dragging, wiring, selection/deletion, input controls, inspection, validation, and simulation integration
 - [x] SQLite circuit save/list/open/update with transactional persistence and unfinished-circuit support
 
 ### Remaining
 
 - [ ] Truth-table visualization in the frontend
-- [ ] Windows build and browser verification
-- [ ] Commit and merge the circuit-persistence feature
+- [ ] Commit and merge the current editor-deletion feature
 - [ ] Further UI refinement and final project review
 
 ## Scope
