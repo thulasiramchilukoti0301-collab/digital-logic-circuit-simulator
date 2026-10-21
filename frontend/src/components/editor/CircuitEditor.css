@@ -52,6 +52,26 @@
 .stale-results-badge { padding: 4px 6px; border-radius: 5px; background: #fff1dd; color: #9a681e; font-size: 8px; font-weight: 750; white-space: nowrap; }
 .simulation-errors { max-width: 560px; margin: 7px 0 0 auto; color: #aa4f40; font-size: 9px; text-align: right; }
 .simulation-errors p { margin: 2px 0; }
+.truth-table-panel { padding: 17px; border-top: 1px solid var(--line); background: #fff; }
+.truth-table-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.truth-table-heading h3 { margin: 5px 0 0; color: var(--ink); font-size: 14px; font-weight: 650; }
+.truth-table-status,
+.truth-table-empty,
+.truth-table-stale-message { margin: 8px 0; color: #75817b; font-size: 10px; }
+.truth-table-stale-message { color: #9a681e; }
+.truth-table-errors { margin: 9px 0; padding: 9px 11px; border: 1px solid #f0d7d1; border-radius: 7px; background: #fff8f6; color: #a64f40; font-size: 10px; }
+.truth-table-errors p { margin: 3px 0; }
+.truth-table-scroll { max-height: 360px; overflow: auto; border: 1px solid #e4e9e4; border-radius: 8px; }
+.truth-table-scroll:focus-visible { outline: 2px solid rgba(52, 137, 99, .4); outline-offset: 2px; }
+.truth-table-scroll table { width: 100%; border-collapse: collapse; color: #46524e; font-size: 10px; }
+.truth-table-scroll caption { padding: 8px 10px; color: #87918d; text-align: left; }
+.truth-table-scroll th,
+.truth-table-scroll td { min-width: 58px; padding: 8px 10px; border-top: 1px solid #edf0ec; text-align: center; }
+.truth-table-scroll th { position: sticky; top: 0; z-index: 1; background: #f4f7f4; color: #46524e; font-weight: 700; }
+.truth-table-scroll th:first-child,
+.truth-table-scroll td:first-child { text-align: left; }
+.truth-table-scroll .truth-table-output-column { border-left: 2px solid #dce7df; }
+.truth-table-scroll tbody tr:nth-child(even) { background: #fafbf9; }
 .circuit-persistence-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .circuit-persistence-controls button, .circuit-persistence-controls select { border: 1px solid #d5ddd8; border-radius: 6px; background: #fff; padding: 6px 9px; color: #28372f; font: inherit; font-size: 11px; }
 .circuit-persistence-controls [role="status"] { color: #66746c; font-size: 10px; }
@@ -325,4 +345,5 @@
   .canvas-counts { gap: 7px; font-size: 8px; }
   .inspector-panel { min-height: 125px; }
   .inspector-details { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; }
+  .truth-table-panel { padding: 12px; }
 }

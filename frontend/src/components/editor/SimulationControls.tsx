@@ -2,8 +2,10 @@ import type { SimulationUiState } from '../../types/simulation'
 
 interface SimulationControlsProps {
   state: SimulationUiState
+  truthTableBusy: boolean
   onValidate: () => void
   onSimulate: () => void
+  onGenerateTruthTable: () => void
 }
 
 function getStatus(state: SimulationUiState): string {
@@ -17,8 +19,8 @@ function getStatus(state: SimulationUiState): string {
   return 'Ready'
 }
 
-export default function SimulationControls({ state, onValidate, onSimulate }: SimulationControlsProps) {
-  const busy = state.phase === 'validating' || state.phase === 'simulating'
+export default function SimulationControls({ state, truthTableBusy, onValidate, onSimulate, onGenerateTruthTable }: SimulationControlsProps) {
+  const busy = truthTableBusy || state.phase === 'validating' || state.phase === 'simulating'
 
   return (
     <div className="simulation-actions">
@@ -32,6 +34,9 @@ export default function SimulationControls({ state, onValidate, onSimulate }: Si
         </button>
         <button className="editor-action-button editor-action-button--primary" type="button" onClick={onSimulate} disabled={busy}>
           Simulate
+        </button>
+        <button className="editor-action-button" type="button" onClick={onGenerateTruthTable} disabled={busy}>
+          {truthTableBusy ? 'Generating table…' : 'Generate Truth Table'}
         </button>
       </div>
       {state.errors.length > 0 && (
