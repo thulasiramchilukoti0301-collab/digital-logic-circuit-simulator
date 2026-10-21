@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { EditorComponent, EditorState, EditorWireDraft, EditorWireTarget } from '../../types/editor'
 import { canConnectComponents, componentHasOutput, createEmptyEditorState } from '../../types/editor'
-import type { BinaryValue, SavedCircuitSummary } from '../../types/api'
+import type { BinaryValue, SavedCircuitSummary, TruthTableResponse } from '../../types/api'
 import { ApiRequestError, apiClient } from '../../services/apiClient'
 import { circuitRequestToEditorState, editorStateToCircuitRequest } from '../../types/editor'
 import type { SimulationAction, SimulationErrorKind, SimulationUiState } from '../../types/simulation'
@@ -10,6 +10,7 @@ import { createInitialSimulationState } from '../../types/simulation'
 import ComponentInspector from './ComponentInspector'
 import ComponentNode from './ComponentNode'
 import SimulationControls from './SimulationControls'
+import TruthTablePanel from './TruthTablePanel'
 import WireLayer from './WireLayer'
 import { getOutputConnectionPosition } from './wireGeometry'
 import './CircuitEditor.css'
@@ -180,14 +181,29 @@ interface CircuitEditorProps {
   onBackendUnavailable: () => void
 }
 
+interface TruthTableUiState {
+  busy: boolean
+  table: TruthTableResponse | null
+  errors: string[]
+  stale: boolean
+  statusMessage: string | null
+}
+
+function createInitialTruthTableState(): TruthTableUiState {
+  return { busy: false, table: null, errors: [], stale: false, statusMessage: null }
+}
+
 export default function CircuitEditor({ backendState, onBackendUnavailable }: CircuitEditorProps) {
   const [editorState, setEditorState] = useState(createEmptyEditorState)
   const [wireDraft, setWireDraft] = useState<EditorWireDraft | null>(null)
   const [simulationState, setSimulationState] = useState<SimulationUiState>(createInitialSimulationState)
+  const [truthTableState, setTruthTableState] = useState<TruthTableUiState>(createInitialTruthTableState)
   const [selectedWireIndex, setSelectedWireIndex] = useState<number | null>(null)
   const circuitRevision = useRef(0)
   const requestInFlight = useRef(false)
   const requestSequence = useRef(0)
+  const truthTableRequestInFlight = useRef(false)
+  const truthTableRequestSequence = useRef(0)
   const nextIdCounter = useRef(1n)
   const [savedId, setSavedId] = useState<number | null>(null)
   const [documentName, setDocumentName] = useState('New circuit')
@@ -369,6 +385,12 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
 
   function markCircuitChanged() {
     circuitRevision.current += 1
+    setTruthTableState((current) => ({
+      ...current,
+      errors: [],
+      statusMessage: null,
+      stale: current.stale || current.table !== null,
+    }))
     setSimulationState((current) => {
       const hasPreviousOutputs = Object.keys(current.outputs).length > 0
       const changedState: SimulationUiState = {
@@ -422,7 +444,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
   }
 
   const validateCircuit = async () => {
-    if (requestInFlight.current || persistenceBusy.current) return
+    if (requestInFlight.current || truthTableRequestInFlight.current || persistenceBusy.current) return
     if (backendState === 'unavailable') {
       showBackendUnavailable('validate', false)
       return
@@ -461,7 +483,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
   }
 
   const simulateCircuit = async () => {
-    if (requestInFlight.current || persistenceBusy.current) return
+    if (requestInFlight.current || truthTableRequestInFlight.current || persistenceBusy.current) return
     if (backendState === 'unavailable') {
       showBackendUnavailable('simulate', true)
       return
@@ -522,8 +544,67 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
     }
   }
 
+  const generateTruthTable = async () => {
+    if (requestInFlight.current || truthTableRequestInFlight.current || persistenceBusy.current) return
+    if (backendState === 'unavailable') {
+      onBackendUnavailable()
+      setTruthTableState((current) => ({
+        ...current,
+        errors: ['The C++ backend is unavailable. Start the server and retry the action.'],
+      }))
+      return
+    }
+
+    truthTableRequestInFlight.current = true
+    const requestId = ++truthTableRequestSequence.current
+    const requestRevision = circuitRevision.current
+    const request = editorStateToCircuitRequest(editorState)
+    setTruthTableState((current) => ({ ...current, busy: true, errors: [], statusMessage: null }))
+
+    try {
+      const result = await apiClient.truthTable(request)
+      if (requestId !== truthTableRequestSequence.current) return
+      if (requestRevision !== circuitRevision.current) {
+        setTruthTableState((current) => ({
+          ...current,
+          errors: ['The circuit changed while the truth table was generating. The old result was discarded; generate again.'],
+          stale: true,
+          statusMessage: null,
+        }))
+        return
+      }
+      setTruthTableState((current) => ({
+        ...current,
+        table: result,
+        errors: [],
+        stale: false,
+        statusMessage: null,
+      }))
+    } catch (error) {
+      if (requestId !== truthTableRequestSequence.current) return
+      if (requestRevision !== circuitRevision.current) {
+        setTruthTableState((current) => ({
+          ...current,
+          errors: ['The circuit changed while the truth table was generating. The old result was discarded; generate again.'],
+          stale: true,
+          statusMessage: null,
+        }))
+      } else {
+        if (error instanceof ApiRequestError && error.status === 0) onBackendUnavailable()
+        setTruthTableState((current) => ({ ...current, errors: getRequestErrors(error), statusMessage: null }))
+      }
+    } finally {
+      truthTableRequestInFlight.current = false
+      setTruthTableState((current) => ({
+        ...current,
+        busy: false,
+        statusMessage: requestId === truthTableRequestSequence.current ? current.statusMessage : null,
+      }))
+    }
+  }
+
   const saveCircuit = async () => {
-    if (persistenceBusy.current || requestInFlight.current) return
+    if (persistenceBusy.current || requestInFlight.current || truthTableRequestInFlight.current) return
     const name = savedId === null ? window.prompt('Name this circuit:') : documentName
     if (!name?.trim()) return
     const snapshot = editorStateToCircuitRequest(editorState)
@@ -548,6 +629,14 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
       const doc = { version: result.circuit.version, components: result.circuit.components, wires: result.circuit.wires }
       const restored = circuitRequestToEditorState(doc)
       setEditorState(restored); setWireDraft(null); setSimulationState(createInitialSimulationState())
+      truthTableRequestSequence.current += 1
+      setTruthTableState({
+        ...createInitialTruthTableState(),
+        busy: truthTableRequestInFlight.current,
+        statusMessage: truthTableRequestInFlight.current
+          ? 'A previous truth-table request is finishing; its result will be discarded.'
+          : null,
+      })
       setSelectedWireIndex(null)
       setCircuitViewKey((key) => key + 1)
       circuitRevision.current += 1
@@ -573,7 +662,7 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
           {dirty && <span className="unsaved-indicator">UNSAVED</span>}
         </div>
         <div className="circuit-persistence-controls">
-          <button type="button" onClick={() => void saveCircuit()} disabled={persistenceBusy.current}>{savedId === null ? 'Save as…' : 'Save'}</button>
+          <button type="button" onClick={() => void saveCircuit()} disabled={persistenceBusy.current || truthTableState.busy}>{savedId === null ? 'Save as…' : 'Save'}</button>
           <select aria-label="Open saved circuit" value="" disabled={persistenceBusy.current} onChange={(event) => { if (event.target.value) void openCircuit(Number(event.target.value)) }}>
             <option value="">Open saved…</option>{savedCircuits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
@@ -583,7 +672,13 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
           <span className="engine-status-dot" />
           C++ engine is authoritative
         </div>
-        <SimulationControls state={simulationState} onValidate={() => void validateCircuit()} onSimulate={() => void simulateCircuit()} />
+        <SimulationControls
+          state={simulationState}
+          truthTableBusy={truthTableState.busy}
+          onValidate={() => void validateCircuit()}
+          onSimulate={() => void simulateCircuit()}
+          onGenerateTruthTable={() => void generateTruthTable()}
+        />
       </div>
       <div className="editor-grid">
         <ComponentPalette onAdd={addComponent} />
@@ -610,6 +705,13 @@ export default function CircuitEditor({ backendState, onBackendUnavailable }: Ci
           onDeleteWire={deleteSelectedWire}
         />
       </div>
+      <TruthTablePanel
+        table={truthTableState.table}
+        busy={truthTableState.busy}
+        stale={truthTableState.stale}
+        errors={truthTableState.errors}
+        statusMessage={truthTableState.statusMessage}
+      />
     </section>
   )
 }

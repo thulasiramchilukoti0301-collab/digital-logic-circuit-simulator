@@ -40,7 +40,7 @@ The browser editor places and connects circuit components, presents component de
 - Drag existing components to reposition them and connect component pins by drawing wires.
 - Select and delete components or individual wires. Deleting a component also removes all wires attached to it.
 - Toggle binary input values, select components, and inspect their type, ID, name, position, input count, or value. The inspector is read-only; component renaming is not currently available.
-- Validate and simulate through the C++ API. Truth-table generation is available in the backend API; a truth-table display is not yet implemented in the frontend.
+- Validate, simulate, and generate/display truth tables through the C++ API. The frontend presents backend-provided input/output columns and rows; it does not evaluate gates or generate truth-table values.
 
 **SQLite persistence**
 
@@ -109,7 +109,7 @@ The engine models components through polymorphic C++ classes. `Component` provid
 
 Click a palette item to place a component in the workspace. Drag a placed component to move it. Start from an output connection point and connect to an unconnected input pin to create a wire. Input controls toggle between `0` and `1`. Select a component to view its details in the inspector.
 
-The editor sends validation and simulation requests through the Vite `/api` proxy. It does not evaluate logic in JavaScript. The backend exposes truth-table generation, but truth-table UI remains future work.
+The editor sends validation, simulation, and truth-table requests through the Vite `/api` proxy. It does not evaluate logic or generate truth-table values in JavaScript; the backend returns all simulation and table results.
 
 ## Persistence API and Database
 
@@ -213,10 +213,10 @@ Start Vite in another terminal with `cd frontend`, `npm install`, and `npm run d
 
 - The C++17 engine supports circuit validation, evaluation, signal propagation, and truth-table generation.
 - The C++ HTTP API exposes health, validation, simulation, truth-table, and SQLite circuit persistence endpoints.
-- The React editor supports palette-click component placement, component dragging, visual wiring, component and wire selection/deletion, input toggles, inspection, validation, and simulation.
+- The React editor supports palette-click component placement, component dragging, visual wiring, component and wire selection/deletion, input toggles, inspection, validation, simulation, and truth-table display using results from the C++ API.
 - SQLite persistence was merged through PR #2. The original persistence implementation was tested on macOS; the later hardening fixes have not yet been retested there. The Windows build, 10/10 CTest tests, and persistence browser checks have passed.
-- Editor component and wire deletion is implemented and manually verified on Windows. These changes are not yet committed or merged.
-- Truth-table UI remains pending.
+- Editor component and wire deletion was merged through PR #3 and manually verified on Windows.
+- Windows browser checks passed for two-input AND, AND/XOR multiple outputs, stale-result regeneration, selection, invalid-circuit recovery, and opening a saved circuit during a throttled table request. NOT-gate and row-limit browser checks have not been performed. macOS truth-table UI testing is pending. The implementation on `feat/truth-table-display` is not yet committed or merged.
 
 ## Development Roadmap
 
@@ -228,12 +228,13 @@ Start Vite in another terminal with `cd frontend`, `npm install`, and `npm run d
 - [x] Circuit validation, evaluation, signal propagation, and truth-table generation
 - [x] HTTP/JSON API for health, validation, simulation, and truth tables
 - [x] React/TypeScript visual circuit editor with component placement, dragging, wiring, selection/deletion, input controls, inspection, validation, and simulation integration
+- [x] Truth-table display using results from the C++ truth-table API
 - [x] SQLite circuit save/list/open/update with transactional persistence and unfinished-circuit support
 
 ### Remaining
 
-- [ ] Truth-table visualization in the frontend
-- [ ] Commit and merge the current editor-deletion feature
+- [ ] NOT-gate and row-limit browser checks, plus macOS truth-table UI testing
+- [ ] Commit and merge the truth-table display feature
 - [ ] Further UI refinement and final project review
 
 ## Scope
