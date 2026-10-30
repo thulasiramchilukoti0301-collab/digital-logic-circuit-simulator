@@ -20,6 +20,7 @@ An academic digital logic simulator with a C++17 simulation engine, a local HTTP
 - [Current Development Status](#current-development-status)
 - [Development Roadmap](#development-roadmap)
 - [Scope](#scope)
+- [License](#license)
 - [Authors](#authors)
 
 ## Overview
@@ -157,6 +158,7 @@ The backend can also generate truth-table rows from a circuit. For `A AND B`:
 |-- frontend/             # React, TypeScript, Vite visual editor
 |-- third_party/          # Vendored cpp-httplib and nlohmann/json headers
 |-- CMakeLists.txt
+|-- LICENSE.txt
 `-- README.md
 ```
 
@@ -216,7 +218,7 @@ Start Vite in another terminal with `cd frontend`, `npm install`, and `npm run d
 - The React editor supports palette-click component placement, component dragging, visual wiring, component and wire selection/deletion, input toggles, inspection, validation, simulation, and truth-table display using results from the C++ API.
 - SQLite persistence was merged through PR #2. The original persistence implementation was tested on macOS; the later hardening fixes have not yet been retested there. The Windows build, 10/10 CTest tests, and persistence browser checks have passed.
 - Editor component and wire deletion was merged through PR #3 and manually verified on Windows.
-- Windows browser checks passed for two-input AND, AND/XOR multiple outputs, stale-result regeneration, selection, invalid-circuit recovery, and opening a saved circuit during a throttled table request. NOT-gate and row-limit browser checks have not been performed. macOS truth-table UI testing is pending. The implementation on `feat/truth-table-display` is not yet committed or merged.
+- Truth-table display was merged through PR #4. Windows browser checks passed for two-input AND, AND/XOR multiple outputs, stale-result regeneration, selection, invalid-circuit recovery, and opening a saved circuit during a throttled table request. NOT-gate and row-limit browser checks have not been performed; macOS truth-table UI testing is pending.
 
 ## Development Roadmap
 
@@ -234,12 +236,15 @@ Start Vite in another terminal with `cd frontend`, `npm install`, and `npm run d
 ### Remaining
 
 - [ ] NOT-gate and row-limit browser checks, plus macOS truth-table UI testing
-- [ ] Commit and merge the truth-table display feature
 - [ ] Further UI refinement and final project review
 
 ## Scope
 
 This project focuses on digital logic circuit editing, validation, simulation, generated truth tables, and local SQLite persistence. The C++ engine remains the authoritative simulation layer; gate evaluation is not reimplemented in JavaScript. Authentication, cloud infrastructure, payments, chat, and AI/LLM features are outside the project scope.
+
+## License
+
+The project's original code is licensed under the [MIT License](LICENSE.txt), which names both authors. Vendored third-party code in `third_party/` retains its own license notices and terms.
 
 ## Authors
 
